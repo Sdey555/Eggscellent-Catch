@@ -160,7 +160,7 @@ QCheckBox {
        <item>
         <widget class="QLabel" name="lblTitle">
          <property name="text">
-          <string>🥚 EGG CATCHER</string>
+          <string>🥚 EGGSCELLENT CATCH</string>
          </property>
         </widget>
        </item>
