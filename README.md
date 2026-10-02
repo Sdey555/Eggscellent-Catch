@@ -63,5 +63,3 @@ Then run the generated executable from the build directory.
 ## Notes
 
 This project is structured as a small desktop game demo and can be used as a learning example for Qt widgets, custom rendering, object animation, and simple game state management.
-
-# Egg-Catcher-Game-Group-Project
