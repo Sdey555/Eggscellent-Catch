@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1024</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>800</width>
+    <height>600</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Egg Catcher — Raster Grid Game</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+QMainWindow, QWidget#centralwidget {
+    background-color: #12141c;
+    color: #e0e6ed;
+    font-family: 'Segoe UI', sans-serif;
+}
+QFrame#topRibbon {
+    background-color: #1a1e2b;
+    border-bottom: 2px solid #2a3144;
+    padding: 6px 12px;
+}
+QLabel {
+    color: #cfd6e0;
+    font-size: 12px;
+}
+QLabel#lblTitle {
+    color: #ffd166;
+    font-size: 17px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+QLabel#lblScore {
+    color: #06d6a0;
+    font-size: 15px;
+    font-weight: bold;
+    background-color: #102621;
+    border: 1px solid #145946;
+    border-radius: 4px;
+    padding: 3px 8px;
+}
+QLabel#lblHighScore {
+    color: #ffb703;
+    font-size: 13px;
+    font-weight: bold;
+    background-color: #2b2310;
+    border: 1px solid #5e4919;
+    border-radius: 4px;
+    padding: 3px 8px;
+}
+QLabel#lblHearts {
+    color: #ef476f;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 0 4px;
+}
+QLabel#lblStatus {
+    color: #a8c7fa;
+    font-size: 12px;
+    font-weight: 500;
+}
+QLabel#lblHelp {
+    background-color: #181c28;
+    color: #8b9bb4;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-top: 1px solid #262c3e;
+}
+QPushButton {
+    background-color: #252b3d;
+    color: #e0e6ed;
+    border: 1px solid #3d4763;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    min-height: 24px;
+}
+QPushButton:hover {
+    background-color: #323a52;
+    border-color: #56648b;
+}
+QPushButton:pressed {
+    background-color: #1b202e;
+}
+QPushButton#btnRestart {
+    background-color: #1d3557;
+    border-color: #457b9d;
+    color: #f1faee;
+}
+QPushButton#btnRestart:hover {
+    background-color: #274775;
+    border-color: #a8dadc;
+}
+QSpinBox {
+    background-color: #1a1e2b;
+    color: #e0e6ed;
+    border: 1px solid #3d4763;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 12px;
+    min-height: 24px;
+}
+QCheckBox {
+    color: #cfd6e0;
+    font-size: 12px;
+    spacing: 5px;
+}
+   </string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="mainVerticalLayout">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QFrame" name="topRibbon">
+      <property name="frameShape">
+       <enum>QFrame::Shape::NoFrame</enum>
+      </property>
+      <layout class="QHBoxLayout" name="ribbonLayout">
+       <property name="spacing">
+        <number>12</number>
+       </property>
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>6</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>6</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lblTitle">
+         <property name="text">
+          <string>🥚 EGG CATCHER</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblScore">
+         <property name="text">
+          <string>SCORE: 0</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblHighScore">
+         <property name="text">
+          <string>BEST: 0</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblHearts">
+         <property name="text">
+          <string>❤❤❤</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblStatus">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>Ready! Catch eggs, avoid bombs!</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="chkShowGrid">
+         <property name="text">
+          <string>Grid Lines</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblScaleText">
+         <property name="text">
+          <string>Scale:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QSpinBox" name="spinScale">
+         <property name="minimum">
+          <number>2</number>
+         </property>
+         <property name="maximum">
+          <number>24</number>
+         </property>
+         <property name="value">
+          <number>6</number>
+         </property>
+         <property name="displayIntegerBase">
+          <number>10</number>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnPause">
+         <property name="text">
+          <string>Pause</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnRestart">
+         <property name="text">
+          <string>Restart (R)</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="my_label" name="frame">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>1</horstretch>
+        <verstretch>1</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="cursor">
+       <cursorShape>CrossCursor</cursorShape>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::StrongFocus</enum>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="lblHelp">
+      <property name="text">
+       <string>Controls: [A / D] or [◄ / ►] Move Basket | [Space] Pause/Resume | [R] Restart | 🥚 Regular Egg (+10) | ⭐ Golden Egg (+50) | 💣 Bomb (Instant Game Over!) | 3 Misses = Game Over</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>my_label</class>
+   <extends>QLabel</extends>
+   <header>my_label.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

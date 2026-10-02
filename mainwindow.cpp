@@ -1,0 +1,1122 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+
+#include <QPixmap>
+#include <QPainter>
+#include <QFont>
+#include <QResizeEvent>
+#include <QKeyEvent>
+#include <algorithm>
+#include <cmath>
+
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent),
+      ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+
+    scale = ui->spinScale->value();
+    myGrid.setDimensions(ui->frame->width(), ui->frame->height());
+    myGrid.setScale(scale);
+    myGrid.setShowGridLines(ui->chkShowGrid->isChecked());
+
+    ui->frame->installEventFilter(this);
+    this->installEventFilter(this);
+
+    connect(ui->frame, &my_label::panDelta, this, &MainWindow::onGridPanned);
+
+    rng.seed(std::random_device{}());
+
+    gameTimer = new QTimer(this);
+    connect(gameTimer, &QTimer::timeout, this, &MainWindow::gameLoopTick);
+    gameTimer->start(30);
+
+    initGame();
+    updateHUD();
+}
+
+MainWindow::~MainWindow()
+{
+    if (gameTimer)
+    {
+        gameTimer->stop();
+    }
+    delete ui;
+}
+
+void MainWindow::initGame()
+{
+    score = 0;
+    hearts = 3;
+    gameState = GameState::PLAYING;
+    gameOverReason.clear();
+
+    keyLeftPressed = false;
+    keyRightPressed = false;
+
+    fallingEgg.active = false;
+    fallingEgg.animTick = 0;
+    fallingEgg.vy = 0.08;
+    fallingEgg.gravity = 0.015;
+    fallingEgg.maxSpeed = 1.6;
+
+    particles.clear();
+    floatingTexts.clear();
+
+    const int width = std::max(ui->frame->width(), 640);
+    const int height = std::max(ui->frame->height(), 480);
+    myGrid.setDimensions(width, height);
+    myGrid.setScale(scale);
+
+    const int minMathX = myGrid.screenToMathX(0);
+    const int maxMathX = myGrid.screenToMathX(width);
+    const int minMathY = myGrid.screenToMathY(height);
+    const int maxMathY = myGrid.screenToMathY(0);
+
+    groundMathY = minMathY + 7;
+
+    const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
+
+    // Initialize Basket
+    basket.mathX = (minMathX + maxMathX) / 2.0;
+    basket.mathY = groundMathY + 1;
+    basket.halfWidth = 5;
+    basket.height = 4;
+    basket.speed = std::clamp(screenSpan / 75.0, 1.3, 4.5);
+
+    // Initialize Birds at high altitude
+    birds.clear();
+
+    Bird b1;
+    b1.mathX = minMathX + 15;
+    b1.mathY = maxMathY - 7;
+    b1.speed = std::clamp(screenSpan / 360.0, 0.35, 1.2);
+    b1.direction = 1;
+    b1.bodyColor = QColor(52, 152, 219);  // Bluebird
+    b1.wingColor = QColor(27, 79, 114);
+    b1.bellyColor = QColor(243, 156, 18);
+    birds.push_back(b1);
+
+    Bird b2;
+    b2.mathX = maxMathX - 18;
+    b2.mathY = maxMathY - 11;
+    b2.speed = std::clamp(screenSpan / 440.0, 0.28, 0.95);
+    b2.direction = -1;
+    b2.bodyColor = QColor(231, 76, 60);   // Robin
+    b2.wingColor = QColor(120, 40, 31);
+    b2.bellyColor = QColor(250, 215, 160);
+    birds.push_back(b2);
+
+    Bird b3;
+    b3.mathX = (minMathX + maxMathX) / 2.0;
+    b3.mathY = maxMathY - 9;
+    b3.speed = std::clamp(screenSpan / 300.0, 0.42, 1.4);
+    b3.direction = 1;
+    b3.bodyColor = QColor(46, 204, 113);  // Greenfinch
+    b3.wingColor = QColor(20, 90, 50);
+    b3.bellyColor = QColor(249, 231, 159);
+    birds.push_back(b3);
+
+    // Initial egg drop cooldown (~3.0 seconds)
+    eggSpawnCooldown = 90;
+
+    ui->lblStatus->setText("Game Started! Move basket with [A/D] or [Left/Right] arrows!");
+}
+
+void MainWindow::resetGame()
+{
+    initGame();
+    updateHUD();
+    redrawPixels();
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    myGrid.setDimensions(ui->frame->width(), ui->frame->height());
+    redrawPixels();
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::KeyPress)
+    {
+        QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+        keyPressEvent(ke);
+        return true;
+    }
+    else if (event->type() == QEvent::KeyRelease)
+    {
+        QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+        keyReleaseEvent(ke);
+        return true;
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (event->isAutoRepeat())
+    {
+        QMainWindow::keyPressEvent(event);
+        return;
+    }
+
+    const int key = event->key();
+
+    if (key == Qt::Key_Left || key == Qt::Key_A)
+    {
+        keyLeftPressed = true;
+    }
+    else if (key == Qt::Key_Right || key == Qt::Key_D)
+    {
+        keyRightPressed = true;
+    }
+    else if (key == Qt::Key_Space)
+    {
+        if (gameState == GameState::GAME_OVER)
+        {
+            resetGame();
+        }
+        else if (gameState == GameState::PLAYING)
+        {
+            gameState = GameState::PAUSED;
+            ui->btnPause->setText("Resume");
+            ui->lblStatus->setText("Game Paused. Press Space to Resume.");
+        }
+        else if (gameState == GameState::PAUSED)
+        {
+            gameState = GameState::PLAYING;
+            ui->btnPause->setText("Pause");
+            ui->lblStatus->setText("Game Resumed!");
+        }
+    }
+    else if (key == Qt::Key_R)
+    {
+        resetGame();
+    }
+    else
+    {
+        QMainWindow::keyPressEvent(event);
+    }
+}
+
+void MainWindow::keyReleaseEvent(QKeyEvent *event)
+{
+    if (event->isAutoRepeat())
+    {
+        QMainWindow::keyReleaseEvent(event);
+        return;
+    }
+
+    const int key = event->key();
+
+    if (key == Qt::Key_Left || key == Qt::Key_A)
+    {
+        keyLeftPressed = false;
+    }
+    else if (key == Qt::Key_Right || key == Qt::Key_D)
+    {
+        keyRightPressed = false;
+    }
+    else
+    {
+        QMainWindow::keyReleaseEvent(event);
+    }
+}
+
+void MainWindow::gameLoopTick()
+{
+    if (gameState == GameState::PLAYING)
+    {
+        updatePhysics();
+    }
+    redrawPixels();
+}
+
+void MainWindow::updatePhysics()
+{
+    const int frameW = ui->frame->width();
+    const int frameH = ui->frame->height();
+    const int minMathX = myGrid.screenToMathX(0);
+    const int maxMathX = myGrid.screenToMathX(frameW);
+    const int minMathY = myGrid.screenToMathY(frameH);
+
+    groundMathY = minMathY + 7;
+    basket.mathY = groundMathY + 1;
+
+    const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
+    basket.speed = std::clamp(screenSpan / 75.0, 1.3, 4.5);
+
+    // 1. Move Basket smoothly
+    if (keyLeftPressed)
+    {
+        basket.mathX -= basket.speed;
+    }
+    if (keyRightPressed)
+    {
+        basket.mathX += basket.speed;
+    }
+
+    const double minBasketX = minMathX + basket.halfWidth + 1.0;
+    const double maxBasketX = maxMathX - basket.halfWidth - 1.0;
+    if (minBasketX < maxBasketX)
+    {
+        basket.mathX = std::clamp(basket.mathX, minBasketX, maxBasketX);
+    }
+
+    // 2. Update Birds and Egg Laying
+    updateBirds();
+    updateEggSpawn();
+
+    // 3. Update Falling Egg
+    updateFallingEgg();
+
+    // 4. Update Particle Effects
+    updateParticles();
+}
+
+void MainWindow::updateBirds()
+{
+    const int frameW = ui->frame->width();
+    const int minMathX = myGrid.screenToMathX(0);
+    const int maxMathX = myGrid.screenToMathX(frameW);
+    const int maxMathY = myGrid.screenToMathY(0);
+
+    for (size_t i = 0; i < birds.size(); ++i)
+    {
+        Bird &bird = birds[i];
+
+        // Maintain comfortable flying height
+        const int targetY = maxMathY - 6 - static_cast<int>(i * 3);
+        bird.mathY = targetY;
+
+        // Wing flapping cycle
+        bird.wingTick++;
+        if (bird.wingTick >= 6)
+        {
+            bird.wingTick = 0;
+            bird.wingFrame = 1 - bird.wingFrame;
+        }
+
+        if (bird.isLaying)
+        {
+            // Flutter in place while warning player
+            bird.layingCountdown--;
+            bird.mathX += (bird.layingCountdown % 2 == 0 ? 0.25 : -0.25);
+
+            if (bird.layingCountdown <= 0)
+            {
+                // Egg is laid!
+                fallingEgg.active = true;
+                fallingEgg.mathX = bird.mathX;
+                fallingEgg.mathY = bird.mathY - 2.0;
+                fallingEgg.type = bird.pendingEggType;
+                fallingEgg.animTick = 0;
+                // Initial downward velocity
+                fallingEgg.vy = 0.08;
+                // Velocity increment for gravity effect per tick
+                const int totalHeight = std::max(30, maxMathY - groundMathY);
+                fallingEgg.gravity = 0.010 + (totalHeight / 7500.0) + std::min(0.005, score * 0.00004);
+                fallingEgg.maxSpeed = 1.2 + (totalHeight / 80.0);
+
+                bird.isLaying = false;
+
+                if (fallingEgg.type == EggType::GOLDEN)
+                {
+                    ui->lblStatus->setText("✨ A bird laid a SPECIAL GOLDEN EGG! Catch it for bonus points!");
+                }
+                else if (fallingEgg.type == EggType::BOMB)
+                {
+                    ui->lblStatus->setText("⚠️ A bird dropped a BOMB! Do NOT catch it in your basket!");
+                }
+                else
+                {
+                    ui->lblStatus->setText("An egg is falling! Catch it!");
+                }
+            }
+        }
+        else
+        {
+            bird.mathX += bird.direction * bird.speed;
+
+            // Turn around at sky boundary
+            if (bird.mathX > maxMathX - 6.0 && bird.direction > 0)
+            {
+                bird.direction = -1;
+            }
+            else if (bird.mathX < minMathX + 6.0 && bird.direction < 0)
+            {
+                bird.direction = 1;
+            }
+        }
+    }
+}
+
+void MainWindow::updateEggSpawn()
+{
+    // Requirements: "birds are laying eggs (one at a time with variable but long enough duration)"
+    bool anyBirdLaying = false;
+    for (const auto &b : birds)
+    {
+        if (b.isLaying)
+        {
+            anyBirdLaying = true;
+            break;
+        }
+    }
+
+    if (!fallingEgg.active && !anyBirdLaying)
+    {
+        eggSpawnCooldown--;
+        if (eggSpawnCooldown <= 0)
+        {
+            const int frameW = ui->frame->width();
+            const int minMathX = myGrid.screenToMathX(0);
+            const int maxMathX = myGrid.screenToMathX(frameW);
+
+            // Find birds that are safely within the visible window
+            std::vector<size_t> validIndices;
+            for (size_t i = 0; i < birds.size(); ++i)
+            {
+                if (birds[i].mathX >= minMathX + 8.0 && birds[i].mathX <= maxMathX - 8.0)
+                {
+                    validIndices.push_back(i);
+                }
+            }
+
+            if (!validIndices.empty())
+            {
+                std::uniform_int_distribution<size_t> birdDist(0, validIndices.size() - 1);
+                size_t chosenIdx = validIndices[birdDist(rng)];
+                Bird &chosenBird = birds[chosenIdx];
+
+                // Egg type distribution:
+                // Regular: 65%, Golden: 18%, Bomb: 17%
+                std::uniform_int_distribution<int> typeDist(0, 99);
+                const int roll = typeDist(rng);
+
+                EggType eType = EggType::REGULAR;
+                if (roll < 65)
+                {
+                    eType = EggType::REGULAR;
+                }
+                else if (roll < 83)
+                {
+                    eType = EggType::GOLDEN;
+                }
+                else
+                {
+                    eType = EggType::BOMB;
+                }
+
+                chosenBird.isLaying = true;
+                chosenBird.layingCountdown = 28; // ~0.85s warning
+                chosenBird.pendingEggType = eType;
+
+                // Set variable but long enough duration before next egg cycle (3.0s to 5.0s)
+                std::uniform_int_distribution<int> cooldownDist(95, 160);
+                eggSpawnCooldown = cooldownDist(rng);
+            }
+        }
+    }
+}
+
+void MainWindow::updateFallingEgg()
+{
+    if (!fallingEgg.active)
+    {
+        return;
+    }
+
+    // Velocity increment for gravity effect
+    fallingEgg.vy = std::min(fallingEgg.maxSpeed, fallingEgg.vy + fallingEgg.gravity);
+    fallingEgg.mathY -= fallingEgg.vy;
+    fallingEgg.animTick++;
+
+    // 1. Collision detection with Basket Rim
+    const double rimY = basket.mathY + basket.height;
+    if (fallingEgg.mathY <= rimY + 0.6 && fallingEgg.mathY >= basket.mathY)
+    {
+        const double deltaX = std::abs(fallingEgg.mathX - basket.mathX);
+        if (deltaX <= basket.halfWidth + 0.8)
+        {
+            // Egg caught!
+            fallingEgg.active = false;
+
+            if (fallingEgg.type == EggType::REGULAR)
+            {
+                score += 10;
+                highScore = std::max(highScore, score);
+                spawnCatchParticles(fallingEgg.mathX, rimY, QColor(255, 255, 230), 12);
+                addFloatingText(basket.mathX, rimY + 3.0, "+10", QColor(46, 204, 113));
+                ui->lblStatus->setText("Caught Regular Egg! +10 pts");
+            }
+            else if (fallingEgg.type == EggType::GOLDEN)
+            {
+                score += 50;
+                highScore = std::max(highScore, score);
+                spawnCatchParticles(fallingEgg.mathX, rimY, QColor(255, 215, 0), 24);
+                addFloatingText(basket.mathX, rimY + 3.0, "⭐ +50 BONUS! ⭐", QColor(255, 215, 0));
+                ui->lblStatus->setText("⭐ BONUS! Caught Golden Egg! +50 pts! ⭐");
+            }
+            else if (fallingEgg.type == EggType::BOMB)
+            {
+                // Catching a bomb ends game instantly
+                spawnExplosionParticles(fallingEgg.mathX, rimY);
+                addFloatingText(basket.mathX, rimY + 4.0, "💥 BOOM! 💥", QColor(231, 76, 60));
+                gameOverReason = "Caught a Bomb! Instant Game Over!";
+                gameState = GameState::GAME_OVER;
+                ui->lblStatus->setText("💥 KABOOM! You caught a bomb! Game Over!");
+            }
+
+            updateHUD();
+            return;
+        }
+    }
+
+    // 2. Collision with Ground
+    if (fallingEgg.mathY <= groundMathY + 1.0)
+    {
+        fallingEgg.active = false;
+
+        if (fallingEgg.type == EggType::REGULAR || fallingEgg.type == EggType::GOLDEN)
+        {
+            // Miss penalty: hearts decreased by 1
+            spawnSplatParticles(fallingEgg.mathX, groundMathY + 1, fallingEgg.type);
+            hearts--;
+            addFloatingText(fallingEgg.mathX, groundMathY + 3.0, "SPLAT! -1 ❤", QColor(231, 76, 60));
+
+            if (hearts <= 0)
+            {
+                hearts = 0;
+                gameOverReason = "Out of Hearts! 3 misses reached.";
+                gameState = GameState::GAME_OVER;
+                ui->lblStatus->setText("Game Over! You lost all 3 hearts.");
+            }
+            else
+            {
+                ui->lblStatus->setText(QString("Egg missed and cracked! Lost 1 heart (%1 left).").arg(hearts));
+            }
+        }
+        else if (fallingEgg.type == EggType::BOMB)
+        {
+            // Bomb safely detonates on ground: player successfully avoided it!
+            spawnCatchParticles(fallingEgg.mathX, groundMathY + 1, QColor(120, 120, 120), 10);
+            addFloatingText(fallingEgg.mathX, groundMathY + 3.0, "DODGED BOMB! Safe!", QColor(168, 199, 250));
+            ui->lblStatus->setText("Bomb safely exploded on the ground! Nice dodge!");
+        }
+
+        updateHUD();
+    }
+}
+
+void MainWindow::updateParticles()
+{
+    for (size_t i = 0; i < particles.size(); )
+    {
+        GameParticle &p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy -= 0.04; // gravity
+        p.life--;
+
+        if (p.life <= 0)
+        {
+            particles[i] = particles.back();
+            particles.pop_back();
+        }
+        else
+        {
+            ++i;
+        }
+    }
+
+    for (size_t i = 0; i < floatingTexts.size(); )
+    {
+        FloatingText &t = floatingTexts[i];
+        t.y += 0.16;
+        t.life--;
+
+        if (t.life <= 0)
+        {
+            floatingTexts[i] = floatingTexts.back();
+            floatingTexts.pop_back();
+        }
+        else
+        {
+            ++i;
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// Raster Grid & Raster Pixels Rendering
+// -------------------------------------------------------------
+void MainWindow::paintCell(QPainter &painter, int mathX, int mathY, const QColor &color)
+{
+    const int sx = myGrid.mathToScreenX(mathX);
+    const int sy = myGrid.mathToScreenY(mathY);
+    if (sx + scale < 0 || sx >= ui->frame->width() || sy + scale < 0 || sy >= ui->frame->height())
+    {
+        return;
+    }
+    painter.fillRect(sx + 1, sy + 1, scale - 1, scale - 1, color);
+}
+
+void MainWindow::rasterizeGround(int minX, int maxX, int gY, int minY)
+{
+    for (int x = minX; x <= maxX; ++x)
+    {
+        // Top lush grass
+        myPixels.setPixel(x, gY, ((x % 3 == 0) ? QColor(88, 214, 141) : QColor(46, 204, 113)));
+        // Sub-grass
+        myPixels.setPixel(x, gY - 1, QColor(39, 174, 96));
+
+        // Earth layers
+        for (int y = gY - 2; y >= minY; --y)
+        {
+            if ((x * 7 + y * 13) % 11 == 0)
+            {
+                myPixels.setPixel(x, y, QColor(121, 85, 72)); // soil speckle
+            }
+            else if (y > gY - 5)
+            {
+                myPixels.setPixel(x, y, QColor(93, 64, 55));
+            }
+            else
+            {
+                myPixels.setPixel(x, y, QColor(78, 52, 46));
+            }
+        }
+    }
+}
+
+void MainWindow::rasterizeBasket(const Basket &b)
+{
+    const int bx = static_cast<int>(std::round(b.mathX));
+    const int by = b.mathY;
+
+    // Handles
+    myPixels.setPixel(bx - 5, by + 4, QColor(93, 64, 55));
+    myPixels.setPixel(bx + 5, by + 4, QColor(93, 64, 55));
+
+    // Top Rim
+    myPixels.setPixel(bx - 5, by + 3, QColor(109, 76, 65));
+    for (int x = bx - 4; x <= bx + 4; ++x)
+    {
+        myPixels.setPixel(x, by + 3, QColor(215, 204, 200)); // rim highlight
+    }
+    myPixels.setPixel(bx + 5, by + 3, QColor(109, 76, 65));
+
+    // Wicker body rows with woven pattern
+    for (int y = by + 2; y >= by + 1; --y)
+    {
+        myPixels.setPixel(bx - 4, y, QColor(93, 64, 55));
+        for (int x = bx - 3; x <= bx + 3; ++x)
+        {
+            if ((x + y) % 2 == 0)
+            {
+                myPixels.setPixel(x, y, QColor(161, 136, 127));
+            }
+            else
+            {
+                myPixels.setPixel(x, y, QColor(141, 110, 99));
+            }
+        }
+        myPixels.setPixel(bx + 4, y, QColor(93, 64, 55));
+    }
+
+    // Base
+    for (int x = bx - 3; x <= bx + 3; ++x)
+    {
+        myPixels.setPixel(x, by, QColor(93, 64, 55));
+    }
+}
+
+void MainWindow::rasterizeBird(const Bird &b)
+{
+    const int bx = static_cast<int>(std::round(b.mathX));
+    const int by = static_cast<int>(std::round(b.mathY));
+    const int dir = b.direction;
+
+    // Relative bird offsets (facing right):
+    // Body layout: 8x5 raster pixels
+    auto drawOffset = [&](int ox, int oy, const QColor &col) {
+        myPixels.setPixel(bx + ox * dir, by + oy, col);
+    };
+
+    const QColor body = b.bodyColor;
+    const QColor wing = b.wingColor;
+    const QColor belly = b.bellyColor;
+    const QColor beak(243, 156, 18);
+    const QColor eye(255, 255, 255);
+    const QColor pupil(20, 20, 20);
+
+    // Beak
+    drawOffset(4, 0, beak);
+    drawOffset(3, 0, beak);
+
+    // Head & Eye
+    drawOffset(2, 1, body);
+    drawOffset(1, 1, eye);
+    drawOffset(1, 1, pupil);
+    drawOffset(2, 0, body);
+
+    // Body
+    for (int ox = -2; ox <= 1; ++ox)
+    {
+        drawOffset(ox, 0, body);
+        drawOffset(ox, -1, belly);
+    }
+    drawOffset(-3, 0, body);   // Tail base
+    drawOffset(-4, 1, wing);   // Tail feather
+
+    // Flapping Wing
+    if (b.wingFrame == 0)
+    {
+        // Wing Level / Up
+        drawOffset(-1, 1, wing);
+        drawOffset(-2, 1, wing);
+        drawOffset(-1, 2, wing);
+    }
+    else
+    {
+        // Wing Down
+        drawOffset(-1, -1, wing);
+        drawOffset(-2, -1, wing);
+        drawOffset(-1, -2, wing);
+    }
+
+    // Warning indicator if bird is about to lay an egg
+    if (b.isLaying)
+    {
+        const QColor alertCol = (b.layingCountdown % 4 < 2) ? QColor(255, 193, 7) : QColor(231, 76, 60);
+        myPixels.setPixel(bx, by - 2, alertCol);
+        myPixels.setPixel(bx, by - 3, alertCol);
+    }
+}
+
+void MainWindow::rasterizeEgg(const FallingEgg &egg)
+{
+    const int ex = static_cast<int>(std::round(egg.mathX));
+    const int ey = static_cast<int>(std::round(egg.mathY));
+
+    if (egg.type == EggType::REGULAR)
+    {
+        // 5x6 Regular White/Eggshell Egg
+        const QColor outline(141, 110, 99);
+        const QColor fill(255, 253, 240);
+        const QColor shade(220, 214, 198);
+        const QColor highlight(255, 255, 255);
+
+        // Top row
+        myPixels.setPixel(ex - 1, ey + 2, outline);
+        myPixels.setPixel(ex, ey + 2, outline);
+        myPixels.setPixel(ex + 1, ey + 2, outline);
+
+        // Row 1
+        myPixels.setPixel(ex - 2, ey + 1, outline);
+        myPixels.setPixel(ex - 1, ey + 1, highlight);
+        myPixels.setPixel(ex, ey + 1, fill);
+        myPixels.setPixel(ex + 1, ey + 1, fill);
+        myPixels.setPixel(ex + 2, ey + 1, outline);
+
+        // Row 0
+        myPixels.setPixel(ex - 2, ey, outline);
+        myPixels.setPixel(ex - 1, ey, highlight);
+        myPixels.setPixel(ex, ey, fill);
+        myPixels.setPixel(ex + 1, ey, fill);
+        myPixels.setPixel(ex + 2, ey, outline);
+
+        // Row -1
+        myPixels.setPixel(ex - 2, ey - 1, outline);
+        myPixels.setPixel(ex - 1, ey - 1, fill);
+        myPixels.setPixel(ex, ey - 1, fill);
+        myPixels.setPixel(ex + 1, ey - 1, shade);
+        myPixels.setPixel(ex + 2, ey - 1, outline);
+
+        // Bottom row
+        myPixels.setPixel(ex - 1, ey - 2, outline);
+        myPixels.setPixel(ex, ey - 2, shade);
+        myPixels.setPixel(ex + 1, ey - 2, outline);
+    }
+    else if (egg.type == EggType::GOLDEN)
+    {
+        // 6x7 Big Shiny Golden Egg
+        const QColor border(160, 90, 0);
+        const QColor goldBright(255, 235, 59);
+        const QColor goldCore(255, 215, 0);
+        const QColor goldDeep(255, 143, 0);
+        const QColor sparkle = (egg.animTick % 6 < 3) ? QColor(255, 255, 255) : goldBright;
+
+        // Top
+        myPixels.setPixel(ex - 1, ey + 3, border);
+        myPixels.setPixel(ex, ey + 3, border);
+
+        for (int y = ey + 2; y >= ey - 2; --y)
+        {
+            myPixels.setPixel(ex - 2, y, border);
+            myPixels.setPixel(ex + 2, y, border);
+        }
+
+        // Inner golden cells with animated sparkle
+        myPixels.setPixel(ex - 1, ey + 2, sparkle);
+        myPixels.setPixel(ex, ey + 2, goldBright);
+        myPixels.setPixel(ex + 1, ey + 2, goldCore);
+
+        myPixels.setPixel(ex - 1, ey + 1, goldBright);
+        myPixels.setPixel(ex, ey + 1, goldCore);
+        myPixels.setPixel(ex + 1, ey + 1, goldDeep);
+
+        myPixels.setPixel(ex - 1, ey, goldCore);
+        myPixels.setPixel(ex, ey, goldCore);
+        myPixels.setPixel(ex + 1, ey, goldDeep);
+
+        myPixels.setPixel(ex - 1, ey - 1, goldCore);
+        myPixels.setPixel(ex, ey - 1, goldDeep);
+        myPixels.setPixel(ex + 1, ey - 1, goldDeep);
+
+        // Bottom
+        myPixels.setPixel(ex - 1, ey - 2, border);
+        myPixels.setPixel(ex, ey - 2, goldDeep);
+        myPixels.setPixel(ex + 1, ey - 2, border);
+    }
+    else if (egg.type == EggType::BOMB)
+    {
+        // 6x7 False Egg (Bomb with flickering fuse)
+        const QColor sparkColor = (egg.animTick % 4 < 2) ? QColor(255, 215, 0) : QColor(231, 76, 60);
+        const QColor fuseColor(121, 85, 72);
+        const QColor metalOutline(38, 50, 56);
+        const QColor metalBody(55, 71, 79);
+        const QColor highlight(120, 144, 156);
+        const QColor dangerCross(229, 57, 53);
+
+        // Flickering fuse on top
+        myPixels.setPixel(ex, ey + 3, sparkColor);
+        myPixels.setPixel(ex + 1, ey + 3, (egg.animTick % 3 == 0 ? sparkColor : fuseColor));
+        myPixels.setPixel(ex, ey + 2, fuseColor);
+
+        // Bomb body outline
+        myPixels.setPixel(ex - 1, ey + 1, metalOutline);
+        myPixels.setPixel(ex, ey + 1, metalOutline);
+        myPixels.setPixel(ex + 1, ey + 1, metalOutline);
+
+        for (int y = ey; y >= ey - 1; --y)
+        {
+            myPixels.setPixel(ex - 2, y, metalOutline);
+            myPixels.setPixel(ex + 2, y, metalOutline);
+        }
+
+        // Bomb body interior with red danger cross
+        myPixels.setPixel(ex - 1, ey, highlight);
+        myPixels.setPixel(ex, ey, dangerCross);
+        myPixels.setPixel(ex + 1, ey, metalBody);
+
+        myPixels.setPixel(ex - 1, ey - 1, dangerCross);
+        myPixels.setPixel(ex, ey - 1, dangerCross);
+        myPixels.setPixel(ex + 1, ey - 1, dangerCross);
+
+        // Bottom
+        myPixels.setPixel(ex - 1, ey - 2, metalOutline);
+        myPixels.setPixel(ex, ey - 2, metalOutline);
+        myPixels.setPixel(ex + 1, ey - 2, metalOutline);
+    }
+}
+
+void MainWindow::rasterizePixelHearts(int startX, int startY, int currentHearts, int maxHearts)
+{
+    // Draw 3 5x5 pixel hearts at upper left
+    for (int h = 0; h < maxHearts; ++h)
+    {
+        const int hx = startX + h * 7;
+        const int hy = startY;
+        const bool active = (h < currentHearts);
+        const QColor heartCol = active ? QColor(239, 71, 111) : QColor(50, 58, 76);
+
+        // 5x5 Heart Pattern
+        myPixels.setPixel(hx - 1, hy, heartCol);
+        myPixels.setPixel(hx + 1, hy, heartCol);
+
+        myPixels.setPixel(hx - 2, hy - 1, heartCol);
+        myPixels.setPixel(hx - 1, hy - 1, heartCol);
+        myPixels.setPixel(hx, hy - 1, heartCol);
+        myPixels.setPixel(hx + 1, hy - 1, heartCol);
+        myPixels.setPixel(hx + 2, hy - 1, heartCol);
+
+        myPixels.setPixel(hx - 1, hy - 2, heartCol);
+        myPixels.setPixel(hx, hy - 2, heartCol);
+        myPixels.setPixel(hx + 1, hy - 2, heartCol);
+
+        myPixels.setPixel(hx, hy - 3, heartCol);
+    }
+}
+
+void MainWindow::spawnCatchParticles(double x, double y, const QColor &col, int count)
+{
+    std::uniform_real_distribution<double> speedDist(-0.7, 0.7);
+    std::uniform_real_distribution<double> vyDist(0.3, 1.0);
+
+    for (int i = 0; i < count; ++i)
+    {
+        GameParticle p;
+        p.x = x;
+        p.y = y;
+        p.vx = speedDist(rng);
+        p.vy = vyDist(rng);
+        p.color = col;
+        p.life = 16;
+        p.maxLife = 16;
+        particles.push_back(p);
+    }
+}
+
+void MainWindow::spawnSplatParticles(double x, double y, EggType type)
+{
+    const QColor yolk(241, 196, 15);
+    const QColor shell(245, 245, 245);
+    const QColor gold(255, 215, 0);
+
+    std::uniform_real_distribution<double> vxDist(-0.8, 0.8);
+    std::uniform_real_distribution<double> vyDist(0.2, 0.8);
+
+    const int total = 18;
+    for (int i = 0; i < total; ++i)
+    {
+        GameParticle p;
+        p.x = x;
+        p.y = y;
+        p.vx = vxDist(rng);
+        p.vy = vyDist(rng);
+        if (type == EggType::GOLDEN)
+        {
+            p.color = (i % 2 == 0 ? gold : QColor(255, 255, 220));
+        }
+        else
+        {
+            p.color = (i % 3 == 0 ? shell : yolk);
+        }
+        p.life = 20;
+        p.maxLife = 20;
+        particles.push_back(p);
+    }
+}
+
+void MainWindow::spawnExplosionParticles(double x, double y)
+{
+    std::uniform_real_distribution<double> vxDist(-1.3, 1.3);
+    std::uniform_real_distribution<double> vyDist(-0.4, 1.5);
+
+    const QColor colors[] = {
+        QColor(231, 76, 60),
+        QColor(230, 126, 34),
+        QColor(241, 196, 15),
+        QColor(255, 255, 255),
+        QColor(52, 73, 94)
+    };
+
+    for (int i = 0; i < 40; ++i)
+    {
+        GameParticle p;
+        p.x = x;
+        p.y = y;
+        p.vx = vxDist(rng);
+        p.vy = vyDist(rng);
+        p.color = colors[i % 5];
+        p.life = 26;
+        p.maxLife = 26;
+        particles.push_back(p);
+    }
+}
+
+void MainWindow::addFloatingText(double x, double y, const QString &text, const QColor &col)
+{
+    FloatingText t;
+    t.x = x;
+    t.y = y;
+    t.text = text;
+    t.color = col;
+    t.life = 28;
+    floatingTexts.push_back(t);
+}
+
+void MainWindow::redrawPixels()
+{
+    const int width = ui->frame->width();
+    const int height = ui->frame->height();
+    if (width <= 10 || height <= 10)
+    {
+        return;
+    }
+
+    QPixmap pix(width, height);
+    pix.fill(QColor(18, 20, 28)); // Dark arcade night canvas
+    QPainter painter(&pix);
+
+    myGrid.setDimensions(width, height);
+    myGrid.setScale(scale);
+    myGrid.setShowGridLines(ui->chkShowGrid->isChecked());
+
+    // 1. Draw Raster Grid Lines (Axes lines are excluded, math coordinate logic kept)
+    myGrid.draw(painter);
+
+    // 2. Clear raster pixel buffer and rasterize all game entities
+    myPixels.clear();
+
+    const int minMathX = myGrid.screenToMathX(0);
+    const int maxMathX = myGrid.screenToMathX(width);
+    const int minMathY = myGrid.screenToMathY(height);
+    const int maxMathY = myGrid.screenToMathY(0);
+
+    // Rasterize Ground
+    rasterizeGround(minMathX, maxMathX, groundMathY, minMathY);
+
+    // Rasterize Birds
+    for (const auto &bird : birds)
+    {
+        rasterizeBird(bird);
+    }
+
+    // Rasterize Basket
+    rasterizeBasket(basket);
+
+    // Rasterize Falling Egg
+    if (fallingEgg.active)
+    {
+        rasterizeEgg(fallingEgg);
+    }
+
+    // Rasterize Hearts in canvas top-left
+    rasterizePixelHearts(minMathX + 3, maxMathY - 3, hearts, 3);
+
+    // 3. Paint all raster pixels into the raster grid cells
+    for (const auto &entry : myPixels.getPixelMap())
+    {
+        const int x = static_cast<int>(entry.first >> 32);
+        const int y = static_cast<int>(entry.first & 0xFFFFFFFFLL);
+        paintCell(painter, x, y, entry.second);
+    }
+
+    // 4. Paint Particles as dynamic raster cells
+    for (const auto &p : particles)
+    {
+        paintCell(painter, static_cast<int>(std::round(p.x)), static_cast<int>(std::round(p.y)), p.color);
+    }
+
+    // 5. Paint Floating Texts
+    QFont font("Segoe UI", 12, QFont::Bold);
+    painter.setFont(font);
+    for (const auto &t : floatingTexts)
+    {
+        const int sx = myGrid.mathToScreenX(static_cast<int>(std::round(t.x)));
+        const int sy = myGrid.mathToScreenY(static_cast<int>(std::round(t.y)));
+
+        painter.setPen(QColor(0, 0, 0, 180));
+        painter.drawText(sx - 39, sy + 1, t.text);
+        painter.setPen(t.color);
+        painter.drawText(sx - 40, sy, t.text);
+    }
+
+    // 6. Overlays for Game Over and Paused
+    if (gameState == GameState::GAME_OVER)
+    {
+        painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 210));
+
+        painter.setPen(QColor(239, 71, 111));
+        QFont titleFont("Segoe UI", 32, QFont::Bold);
+        painter.setFont(titleFont);
+        painter.drawText(QRect(0, height / 2 - 110, width, 60), Qt::AlignCenter, "GAME OVER");
+
+        painter.setPen(QColor(255, 209, 102));
+        QFont subFont("Segoe UI", 16, QFont::DemiBold);
+        painter.setFont(subFont);
+        painter.drawText(QRect(0, height / 2 - 40, width, 40), Qt::AlignCenter, gameOverReason);
+
+        painter.setPen(QColor(6, 214, 160));
+        QFont scoreFont("Segoe UI", 15, QFont::Normal);
+        painter.setFont(scoreFont);
+        painter.drawText(QRect(0, height / 2 + 10, width, 30), Qt::AlignCenter,
+                         QString("Final Score: %1    |    High Score: %2").arg(score).arg(highScore));
+
+        painter.setPen(QColor(168, 199, 250));
+        QFont promptFont("Segoe UI", 13, QFont::Normal);
+        painter.setFont(promptFont);
+        painter.drawText(QRect(0, height / 2 + 60, width, 30), Qt::AlignCenter,
+                         "Press [SPACE] or [R] or click 'Restart' to play again!");
+    }
+    else if (gameState == GameState::PAUSED)
+    {
+        painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 175));
+
+        painter.setPen(QColor(255, 209, 102));
+        QFont pauseFont("Segoe UI", 28, QFont::Bold);
+        painter.setFont(pauseFont);
+        painter.drawText(QRect(0, height / 2 - 50, width, 50), Qt::AlignCenter, "PAUSED");
+
+        painter.setPen(QColor(224, 230, 237));
+        QFont promptFont("Segoe UI", 13, QFont::Normal);
+        painter.setFont(promptFont);
+        painter.drawText(QRect(0, height / 2 + 15, width, 30), Qt::AlignCenter,
+                         "Press [SPACE] or click 'Resume' to continue");
+    }
+
+    painter.end();
+    ui->frame->setPixmap(pix);
+}
+
+void MainWindow::updateHUD()
+{
+    ui->lblScore->setText(QString("SCORE: %1").arg(score));
+    ui->lblHighScore->setText(QString("BEST: %1").arg(highScore));
+
+    QString heartsText;
+    for (int i = 0; i < 3; ++i)
+    {
+        heartsText += (i < hearts) ? "❤" : "♡";
+    }
+    ui->lblHearts->setText(heartsText);
+}
+
+void MainWindow::on_btnRestart_clicked()
+{
+    resetGame();
+}
+
+void MainWindow::on_btnPause_clicked()
+{
+    if (gameState == GameState::PLAYING)
+    {
+        gameState = GameState::PAUSED;
+        ui->btnPause->setText("Resume");
+        ui->lblStatus->setText("Game Paused.");
+    }
+    else if (gameState == GameState::PAUSED)
+    {
+        gameState = GameState::PLAYING;
+        ui->btnPause->setText("Pause");
+        ui->lblStatus->setText("Game Resumed!");
+    }
+    else if (gameState == GameState::GAME_OVER)
+    {
+        resetGame();
+    }
+}
+
+void MainWindow::on_chkShowGrid_toggled(bool checked)
+{
+    myGrid.setShowGridLines(checked);
+    redrawPixels();
+}
+
+void MainWindow::on_spinScale_valueChanged(int val)
+{
+    scale = val;
+    myGrid.setScale(scale);
+    redrawPixels();
+}
+
+void MainWindow::onGridPanned(int dx, int dy)
+{
+    myGrid.pan(dx, dy);
+    redrawPixels();
+}
