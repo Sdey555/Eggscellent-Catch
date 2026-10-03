@@ -11,7 +11,6 @@
 
 #include <QtCore/QVariant>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -36,7 +35,6 @@ public:
     QLabel *lblHighScore;
     QLabel *lblHearts;
     QLabel *lblStatus;
-    QCheckBox *chkShowGrid;
     QLabel *lblScaleText;
     QSpinBox *spinScale;
     QPushButton *btnPause;
@@ -193,12 +191,6 @@ public:
 
         ribbonLayout->addWidget(lblStatus);
 
-        chkShowGrid = new QCheckBox(topRibbon);
-        chkShowGrid->setObjectName("chkShowGrid");
-        chkShowGrid->setChecked(true);
-
-        ribbonLayout->addWidget(chkShowGrid);
-
         lblScaleText = new QLabel(topRibbon);
         lblScaleText->setObjectName("lblScaleText");
 
@@ -208,7 +200,7 @@ public:
         spinScale->setObjectName("spinScale");
         spinScale->setMinimum(2);
         spinScale->setMaximum(24);
-        spinScale->setValue(6);
+        spinScale->setValue(4);
         spinScale->setDisplayIntegerBase(10);
 
         ribbonLayout->addWidget(spinScale);
@@ -253,13 +245,12 @@ public:
 
     void retranslateUi(QMainWindow *MainWindow)
     {
-        MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "Egg Catcher \342\200\224 Raster Grid Game", nullptr));
-        lblTitle->setText(QCoreApplication::translate("MainWindow", "\360\237\245\232 EGG CATCHER", nullptr));
+        MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "Eggscellent Catch", nullptr));
+        lblTitle->setText(QCoreApplication::translate("MainWindow", "\360\237\245\232 EGGSCELLENT CATCH", nullptr));
         lblScore->setText(QCoreApplication::translate("MainWindow", "SCORE: 0", nullptr));
         lblHighScore->setText(QCoreApplication::translate("MainWindow", "BEST: 0", nullptr));
         lblHearts->setText(QCoreApplication::translate("MainWindow", "\342\235\244\342\235\244\342\235\244", nullptr));
         lblStatus->setText(QCoreApplication::translate("MainWindow", "Ready! Catch eggs, avoid bombs!", nullptr));
-        chkShowGrid->setText(QCoreApplication::translate("MainWindow", "Grid Lines", nullptr));
         lblScaleText->setText(QCoreApplication::translate("MainWindow", "Scale:", nullptr));
         btnPause->setText(QCoreApplication::translate("MainWindow", "Pause", nullptr));
         btnRestart->setText(QCoreApplication::translate("MainWindow", "Restart (R)", nullptr));

@@ -14,11 +14,11 @@ MainWindow::MainWindow(QWidget *parent)
       ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    setWindowTitle("Eggscellent Catch");
 
     scale = ui->spinScale->value();
     myGrid.setDimensions(ui->frame->width(), ui->frame->height());
     myGrid.setScale(scale);
-    myGrid.setShowGridLines(ui->chkShowGrid->isChecked());
 
     ui->frame->installEventFilter(this);
     this->installEventFilter(this);
@@ -73,24 +73,24 @@ void MainWindow::initGame()
     const int minMathY = myGrid.screenToMathY(height);
     const int maxMathY = myGrid.screenToMathY(0);
 
-    groundMathY = minMathY + 7;
+    groundMathY = minMathY + 9;
 
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
 
     // Initialize Basket
     basket.mathX = (minMathX + maxMathX) / 2.0;
     basket.mathY = groundMathY + 1;
-    basket.halfWidth = 5;
-    basket.height = 4;
-    basket.speed = std::clamp(screenSpan / 75.0, 1.3, 4.5);
+    basket.halfWidth = 6;
+    basket.height = 5;
+    basket.speed = std::clamp(screenSpan / 70.0, 1.6, 5.2);
 
     // Initialize Birds at high altitude
     birds.clear();
 
     Bird b1;
-    b1.mathX = minMathX + 15;
-    b1.mathY = maxMathY - 7;
-    b1.speed = std::clamp(screenSpan / 360.0, 0.35, 1.2);
+    b1.mathX = minMathX + 18;
+    b1.mathY = maxMathY - 9;
+    b1.speed = std::clamp(screenSpan / 340.0, 0.40, 1.3);
     b1.direction = 1;
     b1.bodyColor = QColor(52, 152, 219);  // Bluebird
     b1.wingColor = QColor(27, 79, 114);
@@ -98,9 +98,9 @@ void MainWindow::initGame()
     birds.push_back(b1);
 
     Bird b2;
-    b2.mathX = maxMathX - 18;
-    b2.mathY = maxMathY - 11;
-    b2.speed = std::clamp(screenSpan / 440.0, 0.28, 0.95);
+    b2.mathX = maxMathX - 22;
+    b2.mathY = maxMathY - 15;
+    b2.speed = std::clamp(screenSpan / 420.0, 0.32, 1.1);
     b2.direction = -1;
     b2.bodyColor = QColor(231, 76, 60);   // Robin
     b2.wingColor = QColor(120, 40, 31);
@@ -109,8 +109,8 @@ void MainWindow::initGame()
 
     Bird b3;
     b3.mathX = (minMathX + maxMathX) / 2.0;
-    b3.mathY = maxMathY - 9;
-    b3.speed = std::clamp(screenSpan / 300.0, 0.42, 1.4);
+    b3.mathY = maxMathY - 12;
+    b3.speed = std::clamp(screenSpan / 280.0, 0.48, 1.5);
     b3.direction = 1;
     b3.bodyColor = QColor(46, 204, 113);  // Greenfinch
     b3.wingColor = QColor(20, 90, 50);
@@ -242,11 +242,11 @@ void MainWindow::updatePhysics()
     const int maxMathX = myGrid.screenToMathX(frameW);
     const int minMathY = myGrid.screenToMathY(frameH);
 
-    groundMathY = minMathY + 7;
+    groundMathY = minMathY + 9;
     basket.mathY = groundMathY + 1;
 
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
-    basket.speed = std::clamp(screenSpan / 75.0, 1.3, 4.5);
+    basket.speed = std::clamp(screenSpan / 70.0, 1.6, 5.2);
 
     // 1. Move Basket smoothly
     if (keyLeftPressed)
@@ -288,7 +288,7 @@ void MainWindow::updateBirds()
         Bird &bird = birds[i];
 
         // Maintain comfortable flying height
-        const int targetY = maxMathY - 6 - static_cast<int>(i * 3);
+        const int targetY = maxMathY - 9 - static_cast<int>(i * 4);
         bird.mathY = targetY;
 
         // Wing flapping cycle
@@ -561,7 +561,20 @@ void MainWindow::paintCell(QPainter &painter, int mathX, int mathY, const QColor
     {
         return;
     }
-    painter.fillRect(sx + 1, sy + 1, scale - 1, scale - 1, color);
+    // 1. Solid raster cell without any grid-line gaps
+    painter.fillRect(sx, sy, scale, scale, color);
+
+    // 2. Inner phosphor glow highlight for vibrant arcade pixel appearance
+    if (scale >= 4)
+    {
+        const int inset = (scale >= 8 ? 2 : 1);
+        const int innerSize = scale - 2 * inset;
+        if (innerSize >= 1)
+        {
+            QColor centerColor = color.lighter(130);
+            painter.fillRect(sx + inset, sy + inset, innerSize, innerSize, centerColor);
+        }
+    }
 }
 
 void MainWindow::rasterizeGround(int minX, int maxX, int gY, int minY)
@@ -596,24 +609,25 @@ void MainWindow::rasterizeBasket(const Basket &b)
 {
     const int bx = static_cast<int>(std::round(b.mathX));
     const int by = b.mathY;
+    const int hw = b.halfWidth;
 
     // Handles
-    myPixels.setPixel(bx - 5, by + 4, QColor(93, 64, 55));
-    myPixels.setPixel(bx + 5, by + 4, QColor(93, 64, 55));
+    myPixels.setPixel(bx - hw, by + 4, QColor(93, 64, 55));
+    myPixels.setPixel(bx + hw, by + 4, QColor(93, 64, 55));
 
     // Top Rim
-    myPixels.setPixel(bx - 5, by + 3, QColor(109, 76, 65));
-    for (int x = bx - 4; x <= bx + 4; ++x)
+    myPixels.setPixel(bx - hw, by + 3, QColor(109, 76, 65));
+    for (int x = bx - hw + 1; x <= bx + hw - 1; ++x)
     {
         myPixels.setPixel(x, by + 3, QColor(215, 204, 200)); // rim highlight
     }
-    myPixels.setPixel(bx + 5, by + 3, QColor(109, 76, 65));
+    myPixels.setPixel(bx + hw, by + 3, QColor(109, 76, 65));
 
     // Wicker body rows with woven pattern
     for (int y = by + 2; y >= by + 1; --y)
     {
-        myPixels.setPixel(bx - 4, y, QColor(93, 64, 55));
-        for (int x = bx - 3; x <= bx + 3; ++x)
+        myPixels.setPixel(bx - hw + 1, y, QColor(93, 64, 55));
+        for (int x = bx - hw + 2; x <= bx + hw - 2; ++x)
         {
             if ((x + y) % 2 == 0)
             {
@@ -624,11 +638,11 @@ void MainWindow::rasterizeBasket(const Basket &b)
                 myPixels.setPixel(x, y, QColor(141, 110, 99));
             }
         }
-        myPixels.setPixel(bx + 4, y, QColor(93, 64, 55));
+        myPixels.setPixel(bx + hw - 1, y, QColor(93, 64, 55));
     }
 
     // Base
-    for (int x = bx - 3; x <= bx + 3; ++x)
+    for (int x = bx - hw + 2; x <= bx + hw - 2; ++x)
     {
         myPixels.setPixel(x, by, QColor(93, 64, 55));
     }
@@ -950,17 +964,13 @@ void MainWindow::redrawPixels()
     }
 
     QPixmap pix(width, height);
-    pix.fill(QColor(18, 20, 28)); // Dark arcade night canvas
+    pix.fill(QColor(14, 17, 24)); // Dark arcade night canvas
     QPainter painter(&pix);
 
     myGrid.setDimensions(width, height);
     myGrid.setScale(scale);
-    myGrid.setShowGridLines(ui->chkShowGrid->isChecked());
 
-    // 1. Draw Raster Grid Lines (Axes lines are excluded, math coordinate logic kept)
-    myGrid.draw(painter);
-
-    // 2. Clear raster pixel buffer and rasterize all game entities
+    // 1. Clear raster pixel buffer and rasterize all game entities
     myPixels.clear();
 
     const int minMathX = myGrid.screenToMathX(0);
@@ -989,7 +999,65 @@ void MainWindow::redrawPixels()
     // Rasterize Hearts in canvas top-left
     rasterizePixelHearts(minMathX + 3, maxMathY - 3, hearts, 3);
 
-    // 3. Paint all raster pixels into the raster grid cells
+    // 2. PASS 1: Pixel Glow Aura Pass (glowing aura radiating beyond cells without any grid lines)
+    const int glowRadius = (scale <= 3 ? 1 : (scale <= 6 ? 2 : 3));
+    const int glowAlpha = (scale <= 3 ? 32 : 45);
+
+    // Special glowing aura for Golden Egg
+    if (fallingEgg.active && fallingEgg.type == EggType::GOLDEN)
+    {
+        const int ex = myGrid.mathToScreenX(static_cast<int>(std::round(fallingEgg.mathX)));
+        const int ey = myGrid.mathToScreenY(static_cast<int>(std::round(fallingEgg.mathY)));
+        const int auraR = scale * 7;
+        QRadialGradient goldGlow(ex + scale / 2.0, ey + scale / 2.0, auraR);
+        goldGlow.setColorAt(0.0, QColor(255, 215, 0, 75));
+        goldGlow.setColorAt(0.4, QColor(255, 190, 0, 28));
+        goldGlow.setColorAt(1.0, QColor(255, 180, 0, 0));
+        painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, goldGlow);
+    }
+    else if (fallingEgg.active && fallingEgg.type == EggType::BOMB)
+    {
+        const int ex = myGrid.mathToScreenX(static_cast<int>(std::round(fallingEgg.mathX)));
+        const int ey = myGrid.mathToScreenY(static_cast<int>(std::round(fallingEgg.mathY + 3.0)));
+        const int sparkR = scale * 5;
+        QRadialGradient sparkGlow(ex + scale / 2.0, ey + scale / 2.0, sparkR);
+        sparkGlow.setColorAt(0.0, QColor(255, 120, 0, 85));
+        sparkGlow.setColorAt(0.5, QColor(230, 60, 0, 30));
+        sparkGlow.setColorAt(1.0, QColor(230, 50, 0, 0));
+        painter.fillRect(ex + scale / 2 - sparkR, ey + scale / 2 - sparkR, sparkR * 2, sparkR * 2, sparkGlow);
+    }
+
+    // Glowing aura for all active raster pixels
+    for (const auto &entry : myPixels.getPixelMap())
+    {
+        const int x = static_cast<int>(entry.first >> 32);
+        const int y = static_cast<int>(entry.first & 0xFFFFFFFFLL);
+        const int sx = myGrid.mathToScreenX(x);
+        const int sy = myGrid.mathToScreenY(y);
+
+        if (sx + scale + glowRadius < 0 || sx - glowRadius >= width ||
+            sy + scale + glowRadius < 0 || sy - glowRadius >= height)
+        {
+            continue;
+        }
+
+        QColor glowColor = entry.second;
+        glowColor.setAlpha(glowAlpha);
+        painter.fillRect(sx - glowRadius, sy - glowRadius, scale + 2 * glowRadius, scale + 2 * glowRadius, glowColor);
+    }
+
+    // Glowing aura for particles
+    for (const auto &p : particles)
+    {
+        const int sx = myGrid.mathToScreenX(static_cast<int>(std::round(p.x)));
+        const int sy = myGrid.mathToScreenY(static_cast<int>(std::round(p.y)));
+        const int pGlowR = glowRadius + 1;
+        QColor pGlowColor = p.color;
+        pGlowColor.setAlpha(65);
+        painter.fillRect(sx - pGlowR, sy - pGlowR, scale + 2 * pGlowR, scale + 2 * pGlowR, pGlowColor);
+    }
+
+    // 3. PASS 2: Pixel Core Pass (draws crisp solid cells with inner phosphor brightness, no grid lines)
     for (const auto &entry : myPixels.getPixelMap())
     {
         const int x = static_cast<int>(entry.first >> 32);
@@ -997,7 +1065,7 @@ void MainWindow::redrawPixels()
         paintCell(painter, x, y, entry.second);
     }
 
-    // 4. Paint Particles as dynamic raster cells
+    // Dynamic particles core pass
     for (const auto &p : particles)
     {
         paintCell(painter, static_cast<int>(std::round(p.x)), static_cast<int>(std::round(p.y)), p.color);
@@ -1100,12 +1168,6 @@ void MainWindow::on_btnPause_clicked()
     {
         resetGame();
     }
-}
-
-void MainWindow::on_chkShowGrid_toggled(bool checked)
-{
-    myGrid.setShowGridLines(checked);
-    redrawPixels();
 }
 
 void MainWindow::on_spinScale_valueChanged(int val)

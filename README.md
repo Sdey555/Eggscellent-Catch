@@ -16,7 +16,7 @@ A Qt-based arcade game where the player controls a basket and catches falling eg
 - Score and best-score tracking
 - Three-heart life system
 - Pause and restart controls
-- Toggleable grid lines and adjustable render scale
+- Adjustable render scale with glowing raster pixels (no grid lines)
 - Animated birds and particle effects for catches and misses
 - Qt-based UI with custom raster-style rendering
 

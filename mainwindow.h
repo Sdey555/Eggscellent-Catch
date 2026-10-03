@@ -88,12 +88,11 @@ public:
     MyGrid()
         : width(0),
           height(0),
-          scale(6),
+          scale(4),
           originX(0),
           originY(0),
           panOffsetX(0),
-          panOffsetY(0),
-          showGridLines(true)
+          panOffsetY(0)
     {}
 
     void setDimensions(int w, int h)
@@ -129,12 +128,6 @@ public:
         calculateOrigin();
     }
 
-    void setShowGridLines(bool show) { showGridLines = show; }
-    bool getShowGridLines() const { return showGridLines; }
-
-    void setGridColor(const QColor &c) { gridColor = c; }
-    QColor getGridColor() const { return gridColor; }
-
     int screenToMathX(int screenX) const
     {
         return static_cast<int>(
@@ -157,23 +150,6 @@ public:
         return originY - (mathY + 1) * scale;
     }
 
-    void draw(QPainter &painter) const
-    {
-        if (scale <= 0 || !showGridLines)
-            return;
-
-        // NOTE: The x and y axis showing is removed, but coordinate/origin math logic is preserved.
-        painter.setPen(QPen(gridColor, 1));
-
-        int startX = (originX % scale + scale) % scale;
-        for (int x = startX; x <= width; x += scale)
-            painter.drawLine(x, 0, x, height);
-
-        int startY = (originY % scale + scale) % scale;
-        for (int y = startY; y <= height; y += scale)
-            painter.drawLine(0, y, width, y);
-    }
-
 private:
     int width;
     int height;
@@ -182,8 +158,6 @@ private:
     int originY;
     int panOffsetX{0};
     int panOffsetY{0};
-    bool showGridLines{true};
-    QColor gridColor{QColor(32, 38, 52)};
 
     void calculateOrigin()
     {
@@ -284,7 +258,6 @@ private slots:
     void gameLoopTick();
     void on_btnRestart_clicked();
     void on_btnPause_clicked();
-    void on_chkShowGrid_toggled(bool checked);
     void on_spinScale_valueChanged(int val);
     void onGridPanned(int dx, int dy);
 
@@ -292,7 +265,7 @@ private:
     Ui::MainWindow *ui;
 
     // Raster Grid & Raster Pixels
-    int scale = 6;
+    int scale = 4;
     MyGrid myGrid;
     MyPixels myPixels;
 
