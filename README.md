@@ -42,6 +42,12 @@ A Qt-based arcade game where the player controls a basket and catches falling eg
 
 ## Build and run
 
+### Run on Windows
+
+Double-click `EggscellentCatch.exe` in the project root. Keep the Qt DLL files and plugin folders beside the executable; they are required for the game to start.
+
+### Build from source
+
 From the project root:
 
 ```bash

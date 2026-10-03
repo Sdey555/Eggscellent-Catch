@@ -254,7 +254,7 @@ public:
     void retranslateUi(QMainWindow *MainWindow)
     {
         MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "Egg Catcher \342\200\224 Raster Grid Game", nullptr));
-        lblTitle->setText(QCoreApplication::translate("MainWindow", "\360\237\245\232 EGG CATCHER", nullptr));
+        lblTitle->setText(QCoreApplication::translate("MainWindow", "\360\237\245\232 EGGSCELLENT CATCH", nullptr));
         lblScore->setText(QCoreApplication::translate("MainWindow", "SCORE: 0", nullptr));
         lblHighScore->setText(QCoreApplication::translate("MainWindow", "BEST: 0", nullptr));
         lblHearts->setText(QCoreApplication::translate("MainWindow", "\342\235\244\342\235\244\342\235\244", nullptr));
