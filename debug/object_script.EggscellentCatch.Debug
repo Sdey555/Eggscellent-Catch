@@ -1,0 +1,13 @@
+debug/main.o
+debug/Pixel.o
+debug/Grid.o
+debug/Basket.o
+debug/Bird.o
+debug/FallingEgg.o
+debug/GameEngine.o
+debug/PixelFont.o
+debug/GameRenderer.o
+debug/CanvasLabel.o
+debug/MainWindow.o
+debug/moc_CanvasLabel.o
+debug/moc_MainWindow.o

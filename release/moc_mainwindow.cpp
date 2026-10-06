@@ -1,12 +1,12 @@
 /****************************************************************************
-** Meta object code from reading C++ file 'mainwindow.h'
+** Meta object code from reading C++ file 'MainWindow.h'
 **
 ** Created by: The Qt Meta Object Compiler version 69 (Qt 6.11.1)
 **
 ** WARNING! All changes made in this file will be lost!
 *****************************************************************************/
 
-#include "../mainwindow.h"
+#include "../src/ui/MainWindow.h"
 #include <QtCore/qmetatype.h>
 
 #include <QtCore/qtmochelpers.h>
@@ -16,7 +16,7 @@
 
 #include <QtCore/qxptype_traits.h>
 #if !defined(Q_MOC_OUTPUT_REVISION)
-#error "The header file 'mainwindow.h' doesn't include <QObject>."
+#error "The header file 'MainWindow.h' doesn't include <QObject>."
 #elif Q_MOC_OUTPUT_REVISION != 69
 #error "This file was generated using the moc from 6.11.1. It"
 #error "cannot be used with the include files from this version of Qt."
@@ -47,7 +47,12 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "val",
         "onGridPanned",
         "dx",
-        "dy"
+        "dy",
+        "onMouseMoved",
+        "QPoint&",
+        "pos",
+        "onMouseLeftClicked",
+        "onMouseRightClicked"
     };
 
     QtMocHelpers::UintData qt_methods {
@@ -65,6 +70,14 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         QtMocHelpers::SlotData<void(int, int)>(7, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Int, 8 }, { QMetaType::Int, 9 },
         }}),
+        // Slot 'onMouseMoved'
+        QtMocHelpers::SlotData<void(QPoint &)>(10, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 11, 12 },
+        }}),
+        // Slot 'onMouseLeftClicked'
+        QtMocHelpers::SlotData<void()>(13, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onMouseRightClicked'
+        QtMocHelpers::SlotData<void()>(14, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -93,6 +106,9 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 2: _t->on_btnPause_clicked(); break;
         case 3: _t->on_spinScale_valueChanged((*reinterpret_cast<std::add_pointer_t<int>>(_a[1]))); break;
         case 4: _t->onGridPanned((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[2]))); break;
+        case 5: _t->onMouseMoved((*reinterpret_cast<std::add_pointer_t<QPoint&>>(_a[1]))); break;
+        case 6: _t->onMouseLeftClicked(); break;
+        case 7: _t->onMouseRightClicked(); break;
         default: ;
         }
     }
@@ -117,14 +133,14 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 5)
+        if (_id < 8)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 5;
+        _id -= 8;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 5)
+        if (_id < 8)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 5;
+        _id -= 8;
     }
     return _id;
 }

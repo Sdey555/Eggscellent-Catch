@@ -6,21 +6,43 @@ CONFIG += c++17
 
 TARGET = EggscellentCatch
 
-# You can make your code fail to compile if it uses deprecated APIs.
-# In order to do so, uncomment the following line.
-#DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
+INCLUDEPATH += . \
+    src \
+    src/core \
+    src/entities \
+    src/game \
+    src/rendering \
+    src/ui
 
 SOURCES += \
-    main.cpp \
-    mainwindow.cpp \
-    my_label.cpp
+    src/main.cpp \
+    src/core/Pixel.cpp \
+    src/core/Grid.cpp \
+    src/entities/Basket.cpp \
+    src/entities/Bird.cpp \
+    src/entities/FallingEgg.cpp \
+    src/game/GameEngine.cpp \
+    src/rendering/PixelFont.cpp \
+    src/rendering/GameRenderer.cpp \
+    src/ui/CanvasLabel.cpp \
+    src/ui/MainWindow.cpp
 
 HEADERS += \
-    mainwindow.h \
-    my_label.h
+    src/core/Pixel.h \
+    src/core/Grid.h \
+    src/entities/GameTypes.h \
+    src/entities/Particle.h \
+    src/entities/Basket.h \
+    src/entities/Bird.h \
+    src/entities/FallingEgg.h \
+    src/game/GameEngine.h \
+    src/rendering/PixelFont.h \
+    src/rendering/GameRenderer.h \
+    src/ui/CanvasLabel.h \
+    src/ui/MainWindow.h
 
 FORMS += \
-    mainwindow.ui
+    src/ui/mainwindow.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

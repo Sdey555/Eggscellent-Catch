@@ -19,7 +19,7 @@
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
-#include "my_label.h"
+#include "CanvasLabel.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -39,7 +39,7 @@ public:
     QSpinBox *spinScale;
     QPushButton *btnPause;
     QPushButton *btnRestart;
-    my_label *frame;
+    CanvasLabel *frame;
     QLabel *lblHelp;
 
     void setupUi(QMainWindow *MainWindow)
@@ -218,7 +218,7 @@ public:
 
         mainVerticalLayout->addWidget(topRibbon);
 
-        frame = new my_label(centralwidget);
+        frame = new CanvasLabel(centralwidget);
         frame->setObjectName("frame");
         QSizePolicy sizePolicy1(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Expanding);
         sizePolicy1.setHorizontalStretch(1);

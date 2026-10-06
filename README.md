@@ -1,71 +1,58 @@
 # Eggscellent Catch — Raster Grid Game
 
-A Qt-based arcade game where the player controls a basket and catches falling eggs while avoiding bombs. The game uses a custom raster/grid rendering style, smooth animation, score tracking, and simple arcade progression.
+A retro arcade egg-catcher game built in Qt/C++ featuring a custom raster graphics pipeline, glowing pixels (with no grid lines), birds laying eggs with physics/gravity, golden bonus eggs, hazard bombs, and a 10-level progression system.
 
 ## Gameplay
 
-- Move the basket with A/D or the left/right arrow keys.
-- Catch regular eggs to score points.
-- Catch golden eggs for a larger bonus.
-- Avoid bombs; touching a bomb ends the run immediately.
-- Missing too many eggs causes game over.
-- Use Space to pause or resume, and R to restart.
+- **Basket Control**: Move the basket with `A` / `D`, `◄` / `►`, or Mouse horizontal tracking.
+- **Eggs**: Catch regular eggs (+10 pts) and glowing golden eggs (+50 pts).
+- **Bombs**: Avoid false eggs (bombs with flickering fuses); catching one causes an instant Game Over!
+- **Lives**: 3 hearts. Missing a falling egg loses 1 heart. Game over at 0 hearts.
+- **Leveling**: 10 progressive levels (every 100 points). Higher levels feature faster falling eggs, higher bomb probabilities, and narrower baskets!
+- **Pause / Restart**: Press `Space` or Right-Click to pause/resume; press `R` or click "Restart" to play again.
 
-## Features
+## Project Structure
 
-- Score and best-score tracking
-- Three-heart life system
-- Pause and restart controls
-- Adjustable render scale with glowing raster pixels (no grid lines)
-- Animated birds and particle effects for catches and misses
-- Qt-based UI with custom raster-style rendering
+The project is organized into clean, modular components inside `src/`:
 
-## Controls
-
-- A / D or Left / Right: Move basket
-- Space: Pause / Resume
-- R: Restart
-
-## Project files
-
-- `DrawLine.pro` — Qt project configuration
-- `mainwindow.cpp` — game loop, rendering, and gameplay logic
-- `mainwindow.h` — core game structures and class definitions
-- `mainwindow.ui` — application layout and controls
-- `my_label.cpp` / `my_label.h` — custom label event handling
+```
+src/
+├── core/                  # Core raster graphics primitives
+│   ├── Pixel.h / .cpp     # MyPix and MyPixels coordinate/color hash map
+│   └── Grid.h / .cpp      # MyGrid math-to-screen coordinate transforms & panning
+├── entities/              # Game entity models and sprite rasterization
+│   ├── GameTypes.h        # Enums (GameState, EggType)
+│   ├── Particle.h         # GameParticle and FloatingText definitions
+│   ├── Basket.h / .cpp    # Basket model & wicker basket rasterizer
+│   ├── Bird.h / .cpp      # Animated bird model & bird rasterizer
+│   └── FallingEgg.h / .cpp# Falling egg physics model & egg/bomb rasterizers
+├── game/                  # Game loop rules, physics simulation, difficulty
+│   └── GameEngine.h / .cpp# State machine, swept collisions, gravity, particle logic
+├── rendering/             # Multi-pass raster rendering and visual effects
+│   ├── PixelFont.h / .cpp # 3x5 retro bitmap pixel font
+│   └── GameRenderer.h/.cpp# Multi-pass glowing raster engine, HUD & overlays
+├── ui/                    # Qt UI layer
+│   ├── CanvasLabel.h/.cpp # Interactive canvas widget with mouse tracking & panning
+│   ├── MainWindow.h/.cpp  # Slender UI coordinator & HUD updates
+│   └── mainwindow.ui      # Qt Designer form layout
+└── main.cpp               # Application entry point
+```
 
 ## Requirements
 
-- Qt 5 or Qt 6 with Widgets module
-- C++17 compiler
+- Qt 6 (or Qt 5) with `Widgets` module
+- C++17 compiler (GCC/MinGW, Clang, or MSVC)
 - qmake
 
-## Build and run
+## Build and Run
 
 ### Run on Windows
+Launch `EggscellentCatch.exe` directly in the project root. (Required Qt DLLs and platform plugins are already bundled in the root directory).
 
-Double-click `EggscellentCatch.exe` in the project root. Keep the Qt DLL files and plugin folders beside the executable; they are required for the game to start.
-
-### Build from source
-
-From the project root:
-
-```bash
-qmake DrawLine.pro
-make
-```
-
-Then run the generated executable from the build directory (typically named after the project, such as `DrawLine`).
-
-On Windows, open the project in Qt Creator or build it with MinGW:
-
+### Build from Source (MinGW / Command Line)
 ```bash
 qmake DrawLine.pro
 mingw32-make
 ```
 
-Then run the generated executable from the build directory.
-
-## Notes
-
-This project is structured as a small desktop game demo and can be used as a learning example for Qt widgets, custom rendering, object animation, and simple game state management.
+The compiled binary will be placed in `release/EggscellentCatch.exe`.

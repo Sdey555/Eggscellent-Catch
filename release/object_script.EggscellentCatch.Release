@@ -1,0 +1,13 @@
+release/main.o
+release/Pixel.o
+release/Grid.o
+release/Basket.o
+release/Bird.o
+release/FallingEgg.o
+release/GameEngine.o
+release/PixelFont.o
+release/GameRenderer.o
+release/CanvasLabel.o
+release/MainWindow.o
+release/moc_CanvasLabel.o
+release/moc_MainWindow.o
