@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QKeyEvent>
 #include <QPainter>
+#include <QLabel>
 #include <vector>
 #include <unordered_map>
 #include <random>
@@ -261,8 +262,25 @@ private slots:
     void on_spinScale_valueChanged(int val);
     void onGridPanned(int dx, int dy);
 
+    // Mouse controls
+    void onMouseMoved(QPoint &pos);
+    void onMouseLeftClicked();
+    void onMouseRightClicked();
+
 private:
     Ui::MainWindow *ui;
+    QLabel *lblLevel = nullptr;
+
+    // Levels / Difficulty
+    static constexpr int MAX_LEVEL = 10;
+    static constexpr int POINTS_PER_LEVEL = 100;
+    int level = 1;
+    int levelBannerTicks = 0;
+
+    // Mouse control state
+    bool mouseControl = false;
+    int mouseScreenX = 0;
+    int lastMouseX = 0;
 
     // Raster Grid & Raster Pixels
     int scale = 4;
@@ -296,7 +314,14 @@ private:
     // Game Logic Methods
     void initGame();
     void resetGame();
+    void togglePause();
     void updatePhysics();
+
+    // Level / Difficulty Methods
+    int levelForScore(int s) const;
+    double levelSpeedMultiplier() const;
+    void applyLevelSettings();
+    void checkLevelUp();
     void updateBirds();
     void updateEggSpawn();
     void updateFallingEgg();
@@ -310,6 +335,10 @@ private:
     void rasterizeBird(const Bird &b);
     void rasterizeEgg(const FallingEgg &egg);
     void rasterizePixelHearts(int startX, int startY, int currentHearts, int maxHearts);
+    void rasterizeLevelBar(int minX, int maxX, int topY);
+    int rasterizePixelText(int x, int topY, const QString &text, const QColor &color);
+    static int pixelTextWidth(const QString &text) { return text.isEmpty() ? 0 : text.size() * 4 - 1; }
+    int hudTick = 0;
 
     // Particle / Effect Generators
     void spawnCatchParticles(double x, double y, const QColor &col, int count = 14);

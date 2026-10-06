@@ -44,6 +44,7 @@ template <> constexpr inline auto my_label::qt_create_metaobjectdata<qt_meta_tag
         "",
         "QPoint&",
         "Mouse_Pos",
+        "rightClicked",
         "panDelta",
         "dx",
         "dy"
@@ -56,9 +57,11 @@ template <> constexpr inline auto my_label::qt_create_metaobjectdata<qt_meta_tag
         }}),
         // Signal 'Mouse_Pos'
         QtMocHelpers::SignalData<void()>(4, 2, QMC::AccessPublic, QMetaType::Void),
+        // Signal 'rightClicked'
+        QtMocHelpers::SignalData<void()>(5, 2, QMC::AccessPublic, QMetaType::Void),
         // Signal 'panDelta'
-        QtMocHelpers::SignalData<void(int, int)>(5, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 6 }, { QMetaType::Int, 7 },
+        QtMocHelpers::SignalData<void(int, int)>(6, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 7 }, { QMetaType::Int, 8 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -85,7 +88,8 @@ void my_label::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, vo
         switch (_id) {
         case 0: _t->sendMousePosition((*reinterpret_cast<std::add_pointer_t<QPoint&>>(_a[1]))); break;
         case 1: _t->Mouse_Pos(); break;
-        case 2: _t->panDelta((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[2]))); break;
+        case 2: _t->rightClicked(); break;
+        case 3: _t->panDelta((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[2]))); break;
         default: ;
         }
     }
@@ -94,7 +98,9 @@ void my_label::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, vo
             return;
         if (QtMocHelpers::indexOfMethod<void (my_label::*)()>(_a, &my_label::Mouse_Pos, 1))
             return;
-        if (QtMocHelpers::indexOfMethod<void (my_label::*)(int , int )>(_a, &my_label::panDelta, 2))
+        if (QtMocHelpers::indexOfMethod<void (my_label::*)()>(_a, &my_label::rightClicked, 2))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (my_label::*)(int , int )>(_a, &my_label::panDelta, 3))
             return;
     }
 }
@@ -118,14 +124,14 @@ int my_label::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 3)
+        if (_id < 4)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 3;
+        _id -= 4;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 3)
+        if (_id < 4)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 3;
+        _id -= 4;
     }
     return _id;
 }
@@ -143,8 +149,14 @@ void my_label::Mouse_Pos()
 }
 
 // SIGNAL 2
+void my_label::rightClicked()
+{
+    QMetaObject::activate(this, &staticMetaObject, 2, nullptr);
+}
+
+// SIGNAL 3
 void my_label::panDelta(int _t1, int _t2)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 2, nullptr, _t1, _t2);
+    QMetaObject::activate<void>(this, &staticMetaObject, 3, nullptr, _t1, _t2);
 }
 QT_WARNING_POP

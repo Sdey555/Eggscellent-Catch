@@ -19,6 +19,7 @@ protected:
 signals:
     void sendMousePosition(QPoint&);
     void Mouse_Pos();
+    void rightClicked();
     void panDelta(int dx, int dy);
 
 private:
@@ -26,6 +27,7 @@ private:
     QPoint dragStartPos;
     QPoint lastDragPos;
     bool isLeftPressed = false;
+    bool isRightPressed = false;
     bool isPanning = false;
 };
 

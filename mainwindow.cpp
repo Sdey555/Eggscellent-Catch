@@ -7,6 +7,7 @@
 #include <QResizeEvent>
 #include <QKeyEvent>
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -24,6 +25,24 @@ MainWindow::MainWindow(QWidget *parent)
     this->installEventFilter(this);
 
     connect(ui->frame, &my_label::panDelta, this, &MainWindow::onGridPanned);
+    connect(ui->frame, &my_label::sendMousePosition, this, &MainWindow::onMouseMoved);
+    connect(ui->frame, &my_label::Mouse_Pos, this, &MainWindow::onMouseLeftClicked);
+    connect(ui->frame, &my_label::rightClicked, this, &MainWindow::onMouseRightClicked);
+
+    // Level indicator in the top ribbon (placed right after BEST score)
+    lblLevel = new QLabel("LEVEL 1", this);
+    lblLevel->setObjectName("lblLevel");
+    lblLevel->setStyleSheet(
+        "color: #c77dff; font-size: 14px; font-weight: bold;"
+        "background-color: #22172e; border: 1px solid #5a3d7a;"
+        "border-radius: 4px; padding: 3px 8px;");
+    const int bestIdx = ui->ribbonLayout->indexOf(ui->lblHighScore);
+    ui->ribbonLayout->insertWidget(bestIdx + 1, lblLevel);
+
+    ui->lblHelp->setText(
+        "Controls: Mouse or [A / D] / [◄ / ►] Move Basket | Right-Click or [Space] Pause | "
+        "Left-Click Resume/Restart | [R] Restart | 🥚 +10 | ⭐ +50 | 💣 Game Over | "
+        "Level up every 100 pts: faster eggs, smaller basket!");
 
     rng.seed(std::random_device{}());
 
@@ -77,10 +96,12 @@ void MainWindow::initGame()
 
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
 
-    // Initialize Basket
+    // Initialize Basket (width depends on level)
+    level = 1;
+    levelBannerTicks = 0;
+    applyLevelSettings();
     basket.mathX = (minMathX + maxMathX) / 2.0;
     basket.mathY = groundMathY + 1;
-    basket.halfWidth = 6;
     basket.height = 5;
     basket.speed = std::clamp(screenSpan / 70.0, 1.6, 5.2);
 
@@ -120,14 +141,78 @@ void MainWindow::initGame()
     // Initial egg drop cooldown (~3.0 seconds)
     eggSpawnCooldown = 90;
 
-    ui->lblStatus->setText("Game Started! Move basket with [A/D] or [Left/Right] arrows!");
+    ui->lblStatus->setText("Level 1! Move the basket with your MOUSE or [A/D] / arrow keys!");
 }
 
 void MainWindow::resetGame()
 {
     initGame();
+    ui->btnPause->setText("Pause");
     updateHUD();
     redrawPixels();
+}
+
+void MainWindow::togglePause()
+{
+    if (gameState == GameState::GAME_OVER)
+    {
+        resetGame();
+    }
+    else if (gameState == GameState::PLAYING)
+    {
+        gameState = GameState::PAUSED;
+        ui->btnPause->setText("Resume");
+        ui->lblStatus->setText("Game Paused. Press Space / Right-Click / Left-Click to Resume.");
+    }
+    else if (gameState == GameState::PAUSED)
+    {
+        gameState = GameState::PLAYING;
+        ui->btnPause->setText("Pause");
+        ui->lblStatus->setText("Game Resumed!");
+    }
+}
+
+// -------------------------------------------------------------
+// Levels / Difficulty
+// -------------------------------------------------------------
+int MainWindow::levelForScore(int s) const
+{
+    return std::min(MAX_LEVEL, 1 + s / POINTS_PER_LEVEL);
+}
+
+double MainWindow::levelSpeedMultiplier() const
+{
+    // Level 1 = 1.0x, Level 10 = 2.8x
+    return 1.0 + 0.20 * (level - 1);
+}
+
+void MainWindow::applyLevelSettings()
+{
+    // Basket shrinks every level: 6 -> 5 -> 4 -> 3 -> 2 (half-width in raster pixels)
+    basket.halfWidth = std::max(2, 6 - (level - 1));
+}
+
+void MainWindow::checkLevelUp()
+{
+    const int newLevel = levelForScore(score);
+    if (newLevel <= level)
+    {
+        return;
+    }
+
+    const int oldHalfWidth = basket.halfWidth;
+    level = newLevel;
+    applyLevelSettings();
+    levelBannerTicks = 60; // ~1.8s banner
+
+    const double rimY = basket.mathY + basket.height;
+    spawnCatchParticles(basket.mathX, rimY, QColor(199, 125, 255), 30);
+    addFloatingText(basket.mathX, rimY + 8.0, QString("LEVEL %1!").arg(level), QColor(199, 125, 255));
+
+    const bool shrank = basket.halfWidth < oldHalfWidth;
+    ui->lblStatus->setText(QString("🚀 LEVEL %1! Eggs fall faster%2")
+                               .arg(level)
+                               .arg(shrank ? " and your basket got smaller!" : "!"));
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)
@@ -167,29 +252,16 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     if (key == Qt::Key_Left || key == Qt::Key_A)
     {
         keyLeftPressed = true;
+        mouseControl = false; // keyboard takes over until the mouse moves again
     }
     else if (key == Qt::Key_Right || key == Qt::Key_D)
     {
         keyRightPressed = true;
+        mouseControl = false;
     }
     else if (key == Qt::Key_Space)
     {
-        if (gameState == GameState::GAME_OVER)
-        {
-            resetGame();
-        }
-        else if (gameState == GameState::PLAYING)
-        {
-            gameState = GameState::PAUSED;
-            ui->btnPause->setText("Resume");
-            ui->lblStatus->setText("Game Paused. Press Space to Resume.");
-        }
-        else if (gameState == GameState::PAUSED)
-        {
-            gameState = GameState::PLAYING;
-            ui->btnPause->setText("Pause");
-            ui->lblStatus->setText("Game Resumed!");
-        }
+        togglePause();
     }
     else if (key == Qt::Key_R)
     {
@@ -230,6 +302,7 @@ void MainWindow::gameLoopTick()
     if (gameState == GameState::PLAYING)
     {
         updatePhysics();
+        hudTick++;
     }
     redrawPixels();
 }
@@ -248,6 +321,11 @@ void MainWindow::updatePhysics()
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
     basket.speed = std::clamp(screenSpan / 70.0, 1.6, 5.2);
 
+    if (levelBannerTicks > 0)
+    {
+        levelBannerTicks--;
+    }
+
     // 1. Move Basket smoothly
     if (keyLeftPressed)
     {
@@ -256,6 +334,14 @@ void MainWindow::updatePhysics()
     if (keyRightPressed)
     {
         basket.mathX += basket.speed;
+    }
+
+    // Mouse control: glide towards the cursor (capped speed keeps it fair, not instant teleport)
+    if (mouseControl && !keyLeftPressed && !keyRightPressed)
+    {
+        const double targetX = static_cast<double>(mouseScreenX - myGrid.getOriginX()) / scale;
+        const double maxStep = basket.speed * 2.0;
+        basket.mathX += std::clamp(targetX - basket.mathX, -maxStep, maxStep);
     }
 
     const double minBasketX = minMathX + basket.halfWidth + 1.0;
@@ -315,10 +401,11 @@ void MainWindow::updateBirds()
                 fallingEgg.animTick = 0;
                 // Initial downward velocity
                 fallingEgg.vy = 0.08;
-                // Velocity increment for gravity effect per tick
+                // Velocity increment for gravity effect per tick (scaled by level)
                 const int totalHeight = std::max(30, maxMathY - groundMathY);
-                fallingEgg.gravity = 0.010 + (totalHeight / 7500.0) + std::min(0.005, score * 0.00004);
-                fallingEgg.maxSpeed = 1.2 + (totalHeight / 80.0);
+                const double speedMul = levelSpeedMultiplier();
+                fallingEgg.gravity = (0.010 + (totalHeight / 7500.0)) * speedMul;
+                fallingEgg.maxSpeed = (1.2 + (totalHeight / 80.0)) * speedMul;
 
                 bird.isLaying = false;
 
@@ -338,7 +425,7 @@ void MainWindow::updateBirds()
         }
         else
         {
-            bird.mathX += bird.direction * bird.speed;
+            bird.mathX += bird.direction * bird.speed * (1.0 + 0.15 * (level - 1));
 
             // Turn around at sky boundary
             if (bird.mathX > maxMathX - 6.0 && bird.direction > 0)
@@ -391,17 +478,20 @@ void MainWindow::updateEggSpawn()
                 size_t chosenIdx = validIndices[birdDist(rng)];
                 Bird &chosenBird = birds[chosenIdx];
 
-                // Egg type distribution:
-                // Regular: 65%, Golden: 18%, Bomb: 17%
+                // Egg type distribution (level 1): Regular 65%, Golden 18%, Bomb 17%
+                // Each level adds +4% bombs (capped at 50%), taken from regular eggs
+                const int bombPct = std::min(50, 17 + 4 * (level - 1));
+                const int goldenPct = 18;
+                const int regularPct = 100 - goldenPct - bombPct;
                 std::uniform_int_distribution<int> typeDist(0, 99);
                 const int roll = typeDist(rng);
 
                 EggType eType = EggType::REGULAR;
-                if (roll < 65)
+                if (roll < regularPct)
                 {
                     eType = EggType::REGULAR;
                 }
-                else if (roll < 83)
+                else if (roll < regularPct + goldenPct)
                 {
                     eType = EggType::GOLDEN;
                 }
@@ -411,11 +501,14 @@ void MainWindow::updateEggSpawn()
                 }
 
                 chosenBird.isLaying = true;
-                chosenBird.layingCountdown = 28; // ~0.85s warning
+                // Warning time shrinks with level: ~0.85s at L1 down to extremely short 8 ticks
+                chosenBird.layingCountdown = std::max(8, 28 - 3 * (level - 1));
                 chosenBird.pendingEggType = eType;
 
-                // Set variable but long enough duration before next egg cycle (3.0s to 5.0s)
-                std::uniform_int_distribution<int> cooldownDist(95, 160);
+                // Variable delay before next egg (3.0s-5.0s at L1, shrinking much faster with level)
+                const double gapFactor = std::max(0.25, 1.0 - 0.09 * (level - 1));
+                std::uniform_int_distribution<int> cooldownDist(static_cast<int>(95 * gapFactor),
+                                                                static_cast<int>(160 * gapFactor));
                 eggSpawnCooldown = cooldownDist(rng);
             }
         }
@@ -430,13 +523,15 @@ void MainWindow::updateFallingEgg()
     }
 
     // Velocity increment for gravity effect
+    const double prevEggY = fallingEgg.mathY;
     fallingEgg.vy = std::min(fallingEgg.maxSpeed, fallingEgg.vy + fallingEgg.gravity);
     fallingEgg.mathY -= fallingEgg.vy;
     fallingEgg.animTick++;
 
     // 1. Collision detection with Basket Rim
+    // (swept test: fast eggs on high levels may jump past the rim in a single tick)
     const double rimY = basket.mathY + basket.height;
-    if (fallingEgg.mathY <= rimY + 0.6 && fallingEgg.mathY >= basket.mathY)
+    if (fallingEgg.mathY <= rimY + 0.6 && prevEggY >= basket.mathY)
     {
         const double deltaX = std::abs(fallingEgg.mathX - basket.mathX);
         if (deltaX <= basket.halfWidth + 0.8)
@@ -470,6 +565,10 @@ void MainWindow::updateFallingEgg()
                 ui->lblStatus->setText("💥 KABOOM! You caught a bomb! Game Over!");
             }
 
+            if (gameState == GameState::PLAYING)
+            {
+                checkLevelUp();
+            }
             updateHUD();
             return;
         }
@@ -866,6 +965,127 @@ void MainWindow::rasterizePixelHearts(int startX, int startY, int currentHearts,
     }
 }
 
+// Tiny 3x5 raster font used for HUD text drawn with pixels
+int MainWindow::rasterizePixelText(int x, int topY, const QString &text, const QColor &color)
+{
+    static const std::unordered_map<char, std::array<const char *, 5>> glyphs = {
+        {'0', {"###", "#.#", "#.#", "#.#", "###"}},
+        {'1', {".#.", "##.", ".#.", ".#.", "###"}},
+        {'2', {"###", "..#", "###", "#..", "###"}},
+        {'3', {"###", "..#", "###", "..#", "###"}},
+        {'4', {"#.#", "#.#", "###", "..#", "..#"}},
+        {'5', {"###", "#..", "###", "..#", "###"}},
+        {'6', {"###", "#..", "###", "#.#", "###"}},
+        {'7', {"###", "..#", "..#", "..#", "..#"}},
+        {'8', {"###", "#.#", "###", "#.#", "###"}},
+        {'9', {"###", "#.#", "###", "..#", "###"}},
+        {'A', {".#.", "#.#", "###", "#.#", "#.#"}},
+        {'E', {"###", "#..", "##.", "#..", "###"}},
+        {'L', {"#..", "#..", "#..", "#..", "###"}},
+        {'M', {"#.#", "###", "###", "#.#", "#.#"}},
+        {'O', {"###", "#.#", "#.#", "#.#", "###"}},
+        {'P', {"###", "#.#", "###", "#..", "#.."}},
+        {'S', {".##", "#..", ".#.", "..#", "##."}},
+        {'T', {"###", ".#.", ".#.", ".#.", ".#."}},
+        {'V', {"#.#", "#.#", "#.#", "#.#", ".#."}},
+        {'X', {"#.#", "#.#", ".#.", "#.#", "#.#"}},
+    };
+
+    int cx = x;
+    for (const QChar qc : text)
+    {
+        const char c = qc.toUpper().toLatin1();
+        auto it = glyphs.find(c);
+        if (it != glyphs.end())
+        {
+            for (int row = 0; row < 5; ++row)
+            {
+                for (int col = 0; col < 3; ++col)
+                {
+                    if (it->second[row][col] == '#')
+                    {
+                        myPixels.setPixel(cx + col, topY - row, color);
+                    }
+                }
+            }
+        }
+        cx += 4; // 3px glyph + 1px spacing (unknown chars / spaces just advance)
+    }
+    return pixelTextWidth(text);
+}
+
+void MainWindow::rasterizeLevelBar(int minX, int maxX, int topY)
+{
+    // Layout (5 rows tall):  [========bar========]  40 PTS TO LV 3
+    const bool maxed = level >= MAX_LEVEL;
+    const int levelStart = (level - 1) * POINTS_PER_LEVEL;
+    const int earned = maxed ? POINTS_PER_LEVEL : std::clamp(score - levelStart, 0, POINTS_PER_LEVEL);
+    const int remaining = POINTS_PER_LEVEL - earned;
+
+    // The bar occupies the space from minX to maxX exactly
+    int barX0 = minX;
+    int barX1 = maxX;
+    if (barX1 - barX0 < 6)
+    {
+        return;
+    }
+
+    const QColor border(94, 72, 140);
+    const QColor emptyCol(30, 34, 50);
+    const QColor notchCol(22, 25, 38);
+    const QColor fillA = maxed ? QColor(255, 143, 0) : QColor(123, 44, 191);
+    const QColor fillB = maxed ? QColor(255, 215, 0) : QColor(199, 125, 255);
+
+    // Border frame
+    for (int x = barX0 + 1; x <= barX1 - 1; ++x)
+    {
+        myPixels.setPixel(x, topY, border);
+        myPixels.setPixel(x, topY - 4, border);
+    }
+    for (int y = topY - 1; y >= topY - 3; --y)
+    {
+        myPixels.setPixel(barX0, y, border);
+        myPixels.setPixel(barX1, y, border);
+    }
+
+    // Interior: filled portion (gradient + highlight + moving shimmer), empty portion with 10% notches
+    const int innerX0 = barX0 + 1;
+    const int innerX1 = barX1 - 1;
+    const int innerW = innerX1 - innerX0 + 1;
+    const int filledW = (innerW * earned) / POINTS_PER_LEVEL;
+    const int shimmerX = innerX0 + (filledW > 0 ? (hudTick / 2) % (filledW + 8) : -100);
+
+    for (int i = 0; i < innerW; ++i)
+    {
+        const int x = innerX0 + i;
+        if (i < filledW)
+        {
+            const double t = innerW > 1 ? static_cast<double>(i) / (innerW - 1) : 1.0;
+            QColor c(static_cast<int>(fillA.red() + (fillB.red() - fillA.red()) * t),
+                     static_cast<int>(fillA.green() + (fillB.green() - fillA.green()) * t),
+                     static_cast<int>(fillA.blue() + (fillB.blue() - fillA.blue()) * t));
+            if (std::abs(x - shimmerX) <= 1)
+            {
+                c = c.lighter(140);
+            }
+            myPixels.setPixel(x, topY - 1, c.lighter(125)); // top highlight row
+            myPixels.setPixel(x, topY - 2, c);
+            myPixels.setPixel(x, topY - 3, c.darker(125));  // bottom shade row
+        }
+        else
+        {
+            const bool notch = ((i * 10) % innerW) < 10 && i > 0;
+            const QColor c = notch ? notchCol : emptyCol;
+            for (int y = topY - 1; y >= topY - 3; --y)
+            {
+                myPixels.setPixel(x, y, c);
+            }
+        }
+    }
+
+
+}
+
 void MainWindow::spawnCatchParticles(double x, double y, const QColor &col, int count)
 {
     std::uniform_real_distribution<double> speedDist(-0.7, 0.7);
@@ -999,6 +1219,9 @@ void MainWindow::redrawPixels()
     // Rasterize Hearts in canvas top-left
     rasterizePixelHearts(minMathX + 3, maxMathY - 3, hearts, 3);
 
+    // Rasterize Level Progress Bar in the top-right
+    rasterizeLevelBar(maxMathX - 40, maxMathX - 3, maxMathY - 2);
+
     // 2. PASS 1: Pixel Glow Aura Pass (glowing aura radiating beyond cells without any grid lines)
     const int glowRadius = (scale <= 3 ? 1 : (scale <= 6 ? 2 : 3));
     const int glowAlpha = (scale <= 3 ? 32 : 45);
@@ -1085,7 +1308,49 @@ void MainWindow::redrawPixels()
         painter.drawText(sx - 40, sy, t.text);
     }
 
-    // 6. Overlays for Game Over and Paused
+    // Draw Progress Bar Text below the bar
+    if (gameState == GameState::PLAYING) {
+        const bool maxed = level >= MAX_LEVEL;
+        const int levelStart = (level - 1) * POINTS_PER_LEVEL;
+        const int earned = maxed ? POINTS_PER_LEVEL : std::clamp(score - levelStart, 0, POINTS_PER_LEVEL);
+        const int remaining = POINTS_PER_LEVEL - earned;
+        const QString progressLabel = maxed ? QString("MAX LEVEL")
+                                            : QString("%1 PTS TO NEXT LEVEL").arg(remaining);
+
+        QFont progressFont("Segoe UI", 9, QFont::Bold);
+        painter.setFont(progressFont);
+        
+        const int sx = myGrid.mathToScreenX(maxMathX - 40);
+        const int sy = myGrid.mathToScreenY(maxMathY - 8);
+        const int barW = myGrid.mathToScreenX(maxMathX - 3) - sx;
+        
+        painter.setPen(QColor(0, 0, 0, 180));
+        painter.drawText(QRect(sx + 1, sy + 1, barW, 20), Qt::AlignCenter, progressLabel);
+        
+        painter.setPen(maxed ? QColor(255, 215, 0) : QColor(224, 230, 237));
+        painter.drawText(QRect(sx, sy, barW, 20), Qt::AlignCenter, progressLabel);
+    }
+
+    // 6. Level-up banner (fades out)
+    if (levelBannerTicks > 0 && gameState == GameState::PLAYING)
+    {
+        const int alpha = std::min(255, levelBannerTicks * 8);
+        painter.setPen(QColor(0, 0, 0, alpha * 2 / 3));
+        QFont bannerFont("Segoe UI", 34, QFont::Black);
+        painter.setFont(bannerFont);
+        const QRect bannerRect(0, height / 3 - 40, width, 70);
+        painter.drawText(bannerRect.translated(3, 3), Qt::AlignCenter, QString("LEVEL %1").arg(level));
+        painter.setPen(QColor(199, 125, 255, alpha));
+        painter.drawText(bannerRect, Qt::AlignCenter, QString("LEVEL %1").arg(level));
+
+        QFont subFont("Segoe UI", 13, QFont::DemiBold);
+        painter.setFont(subFont);
+        painter.setPen(QColor(224, 230, 237, alpha));
+        painter.drawText(QRect(0, height / 3 + 25, width, 30), Qt::AlignCenter,
+                         "Faster eggs • More bombs • Smaller basket");
+    }
+
+    // 7. Overlays for Game Over and Paused
     if (gameState == GameState::GAME_OVER)
     {
         painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 210));
@@ -1104,13 +1369,14 @@ void MainWindow::redrawPixels()
         QFont scoreFont("Segoe UI", 15, QFont::Normal);
         painter.setFont(scoreFont);
         painter.drawText(QRect(0, height / 2 + 10, width, 30), Qt::AlignCenter,
-                         QString("Final Score: %1    |    High Score: %2").arg(score).arg(highScore));
+                         QString("Final Score: %1    |    Level Reached: %2    |    High Score: %3")
+                             .arg(score).arg(level).arg(highScore));
 
         painter.setPen(QColor(168, 199, 250));
         QFont promptFont("Segoe UI", 13, QFont::Normal);
         painter.setFont(promptFont);
         painter.drawText(QRect(0, height / 2 + 60, width, 30), Qt::AlignCenter,
-                         "Press [SPACE] or [R] or click 'Restart' to play again!");
+                         "Click, press [SPACE] or [R], or click 'Restart' to play again!");
     }
     else if (gameState == GameState::PAUSED)
     {
@@ -1125,7 +1391,7 @@ void MainWindow::redrawPixels()
         QFont promptFont("Segoe UI", 13, QFont::Normal);
         painter.setFont(promptFont);
         painter.drawText(QRect(0, height / 2 + 15, width, 30), Qt::AlignCenter,
-                         "Press [SPACE] or click 'Resume' to continue");
+                         "Click, press [SPACE], or click 'Resume' to continue");
     }
 
     painter.end();
@@ -1143,6 +1409,12 @@ void MainWindow::updateHUD()
         heartsText += (i < hearts) ? "❤" : "♡";
     }
     ui->lblHearts->setText(heartsText);
+
+    if (lblLevel)
+    {
+        lblLevel->setText(level >= MAX_LEVEL ? QString("LEVEL %1 (MAX)").arg(level)
+                                             : QString("LEVEL %1").arg(level));
+    }
 }
 
 void MainWindow::on_btnRestart_clicked()
@@ -1152,22 +1424,7 @@ void MainWindow::on_btnRestart_clicked()
 
 void MainWindow::on_btnPause_clicked()
 {
-    if (gameState == GameState::PLAYING)
-    {
-        gameState = GameState::PAUSED;
-        ui->btnPause->setText("Resume");
-        ui->lblStatus->setText("Game Paused.");
-    }
-    else if (gameState == GameState::PAUSED)
-    {
-        gameState = GameState::PLAYING;
-        ui->btnPause->setText("Pause");
-        ui->lblStatus->setText("Game Resumed!");
-    }
-    else if (gameState == GameState::GAME_OVER)
-    {
-        resetGame();
-    }
+    togglePause();
 }
 
 void MainWindow::on_spinScale_valueChanged(int val)
@@ -1181,4 +1438,38 @@ void MainWindow::onGridPanned(int dx, int dy)
 {
     myGrid.pan(dx, dy);
     redrawPixels();
+}
+
+// -------------------------------------------------------------
+// Mouse Controls
+// -------------------------------------------------------------
+void MainWindow::onMouseMoved(QPoint &pos)
+{
+    // Basket follows the cursor horizontally. Tiny jitter is ignored so a resting
+    // mouse never steals control back from the keyboard.
+    const int dx = std::abs(pos.x() - lastMouseX);
+    lastMouseX = pos.x();
+    if (mouseControl || dx >= 3)
+    {
+        mouseScreenX = pos.x();
+        mouseControl = true;
+    }
+}
+
+void MainWindow::onMouseLeftClicked()
+{
+    ui->frame->setFocus(); // keep keyboard working after clicking the canvas
+    mouseScreenX = ui->frame->lastClickPosition().x();
+    mouseControl = true;
+
+    // Left-click resumes a paused game or restarts after game over
+    if (gameState == GameState::PAUSED || gameState == GameState::GAME_OVER)
+    {
+        togglePause();
+    }
+}
+
+void MainWindow::onMouseRightClicked()
+{
+    togglePause();
 }
