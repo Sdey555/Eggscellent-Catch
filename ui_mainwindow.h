@@ -16,7 +16,6 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QPushButton>
-#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
 #include "CanvasLabel.h"
@@ -35,8 +34,6 @@ public:
     QLabel *lblHighScore;
     QLabel *lblHearts;
     QLabel *lblStatus;
-    QLabel *lblScaleText;
-    QSpinBox *spinScale;
     QPushButton *btnPause;
     QPushButton *btnRestart;
     CanvasLabel *frame;
@@ -191,20 +188,6 @@ public:
 
         ribbonLayout->addWidget(lblStatus);
 
-        lblScaleText = new QLabel(topRibbon);
-        lblScaleText->setObjectName("lblScaleText");
-
-        ribbonLayout->addWidget(lblScaleText);
-
-        spinScale = new QSpinBox(topRibbon);
-        spinScale->setObjectName("spinScale");
-        spinScale->setMinimum(2);
-        spinScale->setMaximum(24);
-        spinScale->setValue(4);
-        spinScale->setDisplayIntegerBase(10);
-
-        ribbonLayout->addWidget(spinScale);
-
         btnPause = new QPushButton(topRibbon);
         btnPause->setObjectName("btnPause");
 
@@ -251,7 +234,6 @@ public:
         lblHighScore->setText(QCoreApplication::translate("MainWindow", "BEST: 0", nullptr));
         lblHearts->setText(QCoreApplication::translate("MainWindow", "\342\235\244\342\235\244\342\235\244", nullptr));
         lblStatus->setText(QCoreApplication::translate("MainWindow", "Ready! Catch eggs, avoid bombs!", nullptr));
-        lblScaleText->setText(QCoreApplication::translate("MainWindow", "Scale:", nullptr));
         btnPause->setText(QCoreApplication::translate("MainWindow", "Pause", nullptr));
         btnRestart->setText(QCoreApplication::translate("MainWindow", "Restart (R)", nullptr));
         frame->setText(QString());

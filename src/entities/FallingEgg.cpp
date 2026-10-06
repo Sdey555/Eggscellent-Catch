@@ -127,4 +127,103 @@ void rasterizeEgg(MyPixels &pixels, const FallingEgg &egg)
         pixels.setPixel(ex, ey - 2, metalOutline);
         pixels.setPixel(ex + 1, ey - 2, metalOutline);
     }
+    else if (egg.type == EggType::BASKET_GROW)
+    {
+        // 6x8 Special Emerald Basket Growth Egg with animated pulsing '+' symbol
+        const QColor border(11, 83, 38);
+        const QColor emerald(39, 174, 96);
+        const QColor brightMint(46, 204, 113);
+        const QColor shine(163, 228, 215);
+        const QColor iconCol = (egg.animTick % 4 < 2) ? QColor(255, 255, 255) : brightMint;
+
+        // Top
+        pixels.setPixel(ex - 1, ey + 3, border);
+        pixels.setPixel(ex, ey + 3, border);
+
+        for (int y = ey + 2; y >= ey - 2; --y)
+        {
+            pixels.setPixel(ex - 2, y, border);
+            pixels.setPixel(ex + 2, y, border);
+        }
+
+        // Top inner row
+        pixels.setPixel(ex - 1, ey + 2, shine);
+        pixels.setPixel(ex, ey + 2, brightMint);
+        pixels.setPixel(ex + 1, ey + 2, emerald);
+
+        // Row +1 with vertical arm of '+'
+        pixels.setPixel(ex - 1, ey + 1, brightMint);
+        pixels.setPixel(ex, ey + 1, iconCol);
+        pixels.setPixel(ex + 1, ey + 1, emerald);
+
+        // Row 0 with horizontal arms of '+'
+        pixels.setPixel(ex - 1, ey, iconCol);
+        pixels.setPixel(ex, ey, iconCol);
+        pixels.setPixel(ex + 1, ey, iconCol);
+
+        // Row -1 with vertical arm of '+'
+        pixels.setPixel(ex - 1, ey - 1, brightMint);
+        pixels.setPixel(ex, ey - 1, iconCol);
+        pixels.setPixel(ex + 1, ey - 1, emerald);
+
+        // Bottom
+        pixels.setPixel(ex - 1, ey - 2, border);
+        pixels.setPixel(ex, ey - 2, emerald);
+        pixels.setPixel(ex + 1, ey - 2, border);
+    }
+    else if (egg.type == EggType::BASKET_RESTORE)
+    {
+        // 7x9 Legendary Prismatic Rainbow Crowned Egg (restores basket to starting size)
+        const QColor goldCrown(255, 215, 0);
+        const QColor goldBorder(184, 134, 11);
+        const QColor diamondGlint = (egg.animTick % 4 < 2) ? QColor(255, 255, 255) : QColor(224, 247, 250);
+
+        // Animated rainbow spectrum colors
+        static const QColor spectrum[5] = {
+            QColor(233, 30, 99),   // Rose Magenta
+            QColor(156, 39, 176),  // Royal Violet
+            QColor(0, 229, 255),   // Electric Cyan
+            QColor(0, 230, 118),   // Spring Emerald
+            QColor(255, 235, 59)   // Bright Gold
+        };
+        const int sShift = (egg.animTick / 3) % 5;
+
+        // Golden Crowned Top: Row ey + 4
+        pixels.setPixel(ex - 1, ey + 4, goldCrown);
+        pixels.setPixel(ex, ey + 4, diamondGlint);
+        pixels.setPixel(ex + 1, ey + 4, goldCrown);
+
+        // Row ey + 3
+        pixels.setPixel(ex - 2, ey + 3, goldBorder);
+        pixels.setPixel(ex - 1, ey + 3, spectrum[(sShift + 0) % 5]);
+        pixels.setPixel(ex, ey + 3, diamondGlint);
+        pixels.setPixel(ex + 1, ey + 3, spectrum[(sShift + 1) % 5]);
+        pixels.setPixel(ex + 2, ey + 3, goldBorder);
+
+        // Rows ey + 2 to ey - 2: Shifting rainbow diamond body
+        for (int y = ey + 2; y >= ey - 2; --y)
+        {
+            const int rowIdx = (ey + 2 - y);
+            pixels.setPixel(ex - 3, y, goldBorder);
+            pixels.setPixel(ex - 2, y, spectrum[(sShift + rowIdx) % 5]);
+            pixels.setPixel(ex - 1, y, spectrum[(sShift + rowIdx + 1) % 5]);
+            pixels.setPixel(ex, y, (rowIdx == 2 ? diamondGlint : spectrum[(sShift + rowIdx + 2) % 5]));
+            pixels.setPixel(ex + 1, y, spectrum[(sShift + rowIdx + 3) % 5]);
+            pixels.setPixel(ex + 2, y, spectrum[(sShift + rowIdx + 4) % 5]);
+            pixels.setPixel(ex + 3, y, goldBorder);
+        }
+
+        // Row ey - 3
+        pixels.setPixel(ex - 2, ey - 3, goldBorder);
+        pixels.setPixel(ex - 1, ey - 3, spectrum[(sShift + 2) % 5]);
+        pixels.setPixel(ex, ey - 3, spectrum[(sShift + 3) % 5]);
+        pixels.setPixel(ex + 1, ey - 3, spectrum[(sShift + 4) % 5]);
+        pixels.setPixel(ex + 2, ey - 3, goldBorder);
+
+        // Bottom: Row ey - 4
+        pixels.setPixel(ex - 1, ey - 4, goldBorder);
+        pixels.setPixel(ex, ey - 4, goldCrown);
+        pixels.setPixel(ex + 1, ey - 4, goldBorder);
+    }
 }
+

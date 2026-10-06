@@ -1536,7 +1536,8 @@ debug/GameEngine.o: src/game/GameEngine.cpp src/game/GameEngine.h \
 		src/entities/FallingEgg.h \
 		src/entities/Particle.h \
 		../../Qt/6.11.1/mingw_64/include/QtCore/QString \
-		src/core/Grid.h
+		src/core/Grid.h \
+		src/core/Pixel.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o debug\GameEngine.o src\game\GameEngine.cpp
 
 debug/PixelFont.o: src/rendering/PixelFont.cpp src/rendering/PixelFont.h \
@@ -2224,12 +2225,26 @@ debug/MainWindow.o: src/ui/MainWindow.cpp src/ui/MainWindow.h \
 		../../Qt/6.11.1/mingw_64/include/QtGui/qtextoption.h \
 		../../Qt/6.11.1/mingw_64/include/QtGui/qpen.h \
 		ui_mainwindow.h \
-		src/ui/CanvasLabel.h \
+		../../Qt/6.11.1/mingw_64/include/QtCore/QVariant \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/QApplication \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qapplication.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/QFrame \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qframe.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/QHBoxLayout \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qboxlayout.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qlayout.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qlayoutitem.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qgridlayout.h \
 		../../Qt/6.11.1/mingw_64/include/QtWidgets/QLabel \
 		../../Qt/6.11.1/mingw_64/include/QtWidgets/qlabel.h \
-		../../Qt/6.11.1/mingw_64/include/QtWidgets/qframe.h \
 		../../Qt/6.11.1/mingw_64/include/QtGui/qpicture.h \
 		../../Qt/6.11.1/mingw_64/include/QtGui/qtextdocument.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/QPushButton \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qpushbutton.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/qabstractbutton.h \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/QVBoxLayout \
+		../../Qt/6.11.1/mingw_64/include/QtWidgets/QWidget \
+		src/ui/CanvasLabel.h \
 		../../Qt/6.11.1/mingw_64/include/QtGui/QMouseEvent \
 		../../Qt/6.11.1/mingw_64/include/QtCore/QTimer \
 		../../Qt/6.11.1/mingw_64/include/QtCore/qtimer.h

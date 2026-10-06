@@ -1,0 +1,11 @@
+# Qt build outputs and shadow directories
+build/
+debug/
+.qtc_clangd/
+*.user.*
+*.autosave
+*.bak
+
+# Temporary / OS files
+Thumbs.db
+Desktop.ini

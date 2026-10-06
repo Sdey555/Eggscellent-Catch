@@ -15,50 +15,126 @@ void rasterizeBird(MyPixels &pixels, const Bird &b)
     const QColor body = b.bodyColor;
     const QColor wing = b.wingColor;
     const QColor belly = b.bellyColor;
-    const QColor beak(243, 156, 18);
+    const QColor beakA(243, 156, 18);
+    const QColor beakB(230, 126, 34);
     const QColor eye(255, 255, 255);
-    const QColor pupil(20, 20, 20);
+    const QColor pupil(15, 23, 42);
 
-    // Beak
-    drawOffset(4, 0, beak);
-    drawOffset(3, 0, beak);
+    // 1. Sharp beak (Offsets +6 to +8)
+    drawOffset(8, 0, beakA);
+    drawOffset(7, 0, beakA);
+    drawOffset(7, 1, beakB);
+    drawOffset(6, 0, beakB);
+    drawOffset(6, 1, beakA);
 
-    // Head & Eye
+    // 2. Feather crest on head top
+    drawOffset(2, 4, wing);
+    drawOffset(3, 4, body.lighter(115));
+    drawOffset(4, 4, wing);
+
+    // 3. Head & Eye (Offsets +3 to +6, rows +2 to +3)
+    drawOffset(3, 3, body);
+    drawOffset(4, 3, body);
+    drawOffset(5, 3, body);
+
+    drawOffset(3, 2, body);
+    drawOffset(4, 2, eye);
+    drawOffset(5, 2, pupil);
+    drawOffset(6, 2, body);
+
+    // 4. Neck & Upper Back
     drawOffset(2, 1, body);
-    drawOffset(1, 1, eye);
-    drawOffset(1, 1, pupil);
-    drawOffset(2, 0, body);
+    drawOffset(1, 1, body);
+    drawOffset(0, 1, body);
+    drawOffset(-1, 1, body);
+    drawOffset(2, 2, body);
+    drawOffset(1, 2, body);
 
-    // Body
-    for (int ox = -2; ox <= 1; ++ox)
+    // 5. Plump Breast & Belly (Offsets -2 to +5, rows -1 to 0)
+    for (int ox = -2; ox <= 5; ++ox)
     {
-        drawOffset(ox, 0, body);
-        drawOffset(ox, -1, belly);
+        drawOffset(ox, 0, belly);
     }
-    drawOffset(-3, 0, body);   // Tail base
-    drawOffset(-4, 1, wing);   // Tail feather
+    drawOffset(-1, -1, belly.darker(115));
+    drawOffset(0, -1, belly);
+    drawOffset(1, -1, belly);
+    drawOffset(2, -1, belly);
+    drawOffset(3, -1, belly.darker(115));
 
-    // Flapping Wing
+    // 6. Layered Tail Feathers (Offsets -7 to -3)
+    drawOffset(-4, 2, wing);
+    drawOffset(-5, 2, wing);
+    drawOffset(-6, 3, wing);
+
+    drawOffset(-3, 1, body);
+    drawOffset(-4, 1, body);
+    drawOffset(-5, 1, wing);
+    drawOffset(-6, 1, wing);
+    drawOffset(-7, 2, wing.darker(120));
+
+    drawOffset(-3, 0, body);
+    drawOffset(-4, 0, wing);
+    drawOffset(-5, 0, wing.darker(120));
+
+    // 7. Flapping Wing (3 dynamic animation frames)
     if (b.wingFrame == 0)
     {
-        // Wing Level / Up
-        drawOffset(-1, 1, wing);
-        drawOffset(-2, 1, wing);
+        // Wing High (Flap Up)
+        drawOffset(1, 2, wing);
+        drawOffset(0, 2, wing);
         drawOffset(-1, 2, wing);
+
+        drawOffset(1, 3, wing);
+        drawOffset(0, 3, wing);
+        drawOffset(-1, 3, wing);
+        drawOffset(-2, 3, wing);
+
+        drawOffset(0, 4, wing);
+        drawOffset(-1, 4, wing);
+        drawOffset(-2, 4, wing);
+
+        drawOffset(0, 5, wing.lighter(135));
+        drawOffset(-1, 5, wing.lighter(135));
+    }
+    else if (b.wingFrame == 1)
+    {
+        // Wing Mid (Level Glide)
+        for (int ox = -3; ox <= 1; ++ox)
+        {
+            drawOffset(ox, 1, wing);
+        }
+        drawOffset(-2, 2, wing);
+        drawOffset(-1, 2, wing);
+        drawOffset(0, 2, wing);
+
+        drawOffset(-1, 3, wing.lighter(125));
+        drawOffset(0, 3, wing.lighter(125));
     }
     else
     {
-        // Wing Down
+        // Wing Down (Push Down)
+        drawOffset(0, 1, wing);
+        drawOffset(-1, 1, wing);
+
+        drawOffset(0, 0, wing);
+        drawOffset(-1, 0, wing);
+        drawOffset(-2, 0, wing);
+
         drawOffset(-1, -1, wing);
         drawOffset(-2, -1, wing);
-        drawOffset(-1, -2, wing);
+        drawOffset(-3, -1, wing);
+
+        drawOffset(-1, -2, wing.lighter(120));
+        drawOffset(-2, -2, wing.lighter(120));
     }
 
-    // Warning indicator if bird is about to lay an egg
+    // 8. Warning indicator when bird is about to lay an egg
     if (b.isLaying)
     {
-        const QColor alertCol = (b.layingCountdown % 4 < 2) ? QColor(255, 193, 7) : QColor(231, 76, 60);
+        const QColor alertCol = (b.layingCountdown % 4 < 2) ? QColor(255, 215, 0) : QColor(231, 76, 60);
         pixels.setPixel(bx, by - 2, alertCol);
         pixels.setPixel(bx, by - 3, alertCol);
+        pixels.setPixel(bx - 1, by - 2, alertCol);
+        pixels.setPixel(bx + 1, by - 2, alertCol);
     }
 }

@@ -12,8 +12,6 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     this->setWindowTitle("Eggscellent Catch");
 
-    ui->spinScale->setMinimum(2);
-    ui->spinScale->setValue(4);
     scale = 4;
     myGrid.setScale(scale);
 
@@ -223,13 +221,6 @@ void MainWindow::on_btnRestart_clicked()
 void MainWindow::on_btnPause_clicked()
 {
     togglePause();
-}
-
-void MainWindow::on_spinScale_valueChanged(int val)
-{
-    scale = val;
-    myGrid.setScale(scale);
-    redrawPixels();
 }
 
 void MainWindow::onGridPanned(int dx, int dy)

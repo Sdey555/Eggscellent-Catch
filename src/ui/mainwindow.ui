@@ -199,29 +199,6 @@ QCheckBox {
         </widget>
        </item>
        <item>
-        <widget class="QLabel" name="lblScaleText">
-         <property name="text">
-          <string>Scale:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QSpinBox" name="spinScale">
-         <property name="minimum">
-          <number>2</number>
-         </property>
-         <property name="maximum">
-          <number>24</number>
-         </property>
-         <property name="value">
-          <number>4</number>
-         </property>
-         <property name="displayIntegerBase">
-          <number>10</number>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QPushButton" name="btnPause">
          <property name="text">
           <string>Pause</string>

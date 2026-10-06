@@ -6,8 +6,8 @@ class MyPixels;
 struct Basket {
     double mathX = 0.0;
     int mathY = 0;
-    int halfWidth = 6;
-    int height = 5;
+    int halfWidth = 12;   // Larger default width (19 pixels total)
+    int height = 7;      // Larger height (7 rows)
     double speed = 1.6;
 };
 

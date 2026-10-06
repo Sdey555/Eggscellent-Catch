@@ -52,21 +52,20 @@ void GameRenderer::rasterizeGround(MyPixels &pixels, int minX, int maxX, int gY,
 {
     for (int x = minX; x <= maxX; ++x)
     {
-        // Top lush grass
+        // Highlighted lush foreground grass (vibrant & sharp)
         pixels.setPixel(x, gY, ((x % 3 == 0) ? QColor(88, 214, 141) : QColor(46, 204, 113)));
-        // Sub-grass
         pixels.setPixel(x, gY - 1, QColor(39, 174, 96));
 
-        // Earth layers
+        // Rich fertile earth layers
         for (int y = gY - 2; y >= minY; --y)
         {
             if ((x * 7 + y * 13) % 11 == 0)
             {
-                pixels.setPixel(x, y, QColor(121, 85, 72)); // soil speckle
+                pixels.setPixel(x, y, QColor(141, 110, 99)); // Pebble speckle
             }
             else if (y > gY - 5)
             {
-                pixels.setPixel(x, y, QColor(93, 64, 55));
+                pixels.setPixel(x, y, QColor(109, 76, 65));
             }
             else
             {
@@ -84,7 +83,7 @@ void GameRenderer::rasterizePixelHearts(MyPixels &pixels, int startX, int startY
         const int hx = startX + h * 7;
         const int hy = startY;
         const bool active = (h < currentHearts);
-        const QColor heartCol = active ? QColor(239, 71, 111) : QColor(50, 58, 76);
+        const QColor heartCol = active ? QColor(239, 71, 111) : QColor(70, 78, 96);
 
         // 5x5 Heart Pattern
         pixels.setPixel(hx - 1, hy, heartCol);
@@ -118,8 +117,8 @@ void GameRenderer::rasterizeLevelBar(MyPixels &pixels, int minX, int maxX, int t
     }
 
     const QColor border(94, 72, 140);
-    const QColor emptyCol(30, 34, 50);
-    const QColor notchCol(22, 25, 38);
+    const QColor emptyCol(38, 44, 62);
+    const QColor notchCol(28, 32, 48);
     const QColor fillA = maxed ? QColor(255, 143, 0) : QColor(123, 44, 191);
     const QColor fillB = maxed ? QColor(255, 215, 0) : QColor(199, 125, 255);
 
@@ -170,6 +169,476 @@ void GameRenderer::rasterizeLevelBar(MyPixels &pixels, int minX, int maxX, int t
     }
 }
 
+// -------------------------------------------------------------
+// Pure Pixelated Background Layers (Zero Smooth Drawing)
+// Brighter & Hazier Atmospheric Palette with Perspective Knoll
+// -------------------------------------------------------------
+void GameRenderer::renderPixelSky(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
+                                  int minMathX, int maxMathX, int minMathY, int maxMathY, int groundMathY)
+{
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+    Q_UNUSED(minMathY);
+
+    // Stepped pixel color bands: brighter, soft atmospheric pastel daylight haze
+    static const QColor skyBands[] = {
+        QColor(92, 138, 186),  // Atmospheric cornflower (zenith)
+        QColor(112, 154, 198), // Soft airy blue
+        QColor(133, 172, 210), // Pale cerulean
+        QColor(154, 188, 220), // Light sky blue
+        QColor(176, 204, 229), // Hazy pastel blue
+        QColor(196, 218, 237), // Soft atmospheric haze
+        QColor(214, 229, 243), // Pale misty sky
+        QColor(228, 237, 246), // Warm pearl haze
+        QColor(241, 238, 228), // Soft golden horizon haze
+        QColor(246, 233, 218)  // Gentle peach horizon
+    };
+    const int bandCount = 10;
+    const int bandH = std::max(4, (maxMathY - groundMathY) / bandCount);
+
+    for (int b = 0; b < bandCount; ++b)
+    {
+        const int bandTop = maxMathY - b * bandH;
+        const int bandBottom = (b == bandCount - 1) ? (groundMathY + 1) : (bandTop - bandH + 1);
+        const QColor bandCol = skyBands[b];
+        const QColor nextCol = (b + 1 < bandCount) ? skyBands[b + 1] : bandCol;
+
+        // Draw solid pixel block for this band
+        for (int my = bandTop; my >= bandBottom; --my)
+        {
+            // Transition row: retro checkerboard dither pattern
+            if (my == bandBottom && b + 1 < bandCount)
+            {
+                for (int mx = minMathX; mx <= maxMathX; ++mx)
+                {
+                    const QColor c = ((mx + my) % 2 == 0) ? nextCol : bandCol;
+                    const int sx = grid.mathToScreenX(mx);
+                    const int sy = grid.mathToScreenY(my);
+                    painter.fillRect(sx, sy, scale, scale, c);
+                }
+            }
+            else
+            {
+                const int sx = grid.mathToScreenX(minMathX);
+                const int sy = grid.mathToScreenY(my);
+                const int sw = (maxMathX - minMathX + 1) * scale;
+                painter.fillRect(sx, sy, sw, scale, bandCol);
+            }
+        }
+    }
+}
+
+void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
+                                    int minMathX, int maxMathX, int maxMathY, int hudTick)
+{
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+
+    const int mathSpan = maxMathX - minMathX + 90;
+
+    // 4 Grand Drifting Pixel Clouds (Noticeably larger and puffier)
+    struct CloudDef {
+        int speedDivider;
+        int tickOffset;
+        int relY;
+        int width;
+        int height;
+    };
+    static const CloudDef clouds[4] = {
+        { 5,  15, -16, 48, 14 },
+        { 7, 140, -26, 40, 12 },
+        { 4, 270, -38, 54, 15 },
+        { 6, 390, -20, 36, 11 }
+    };
+
+    const QColor cHighlight(255, 255, 255);
+    const QColor cBody(248, 250, 252);
+    const QColor cShade(200, 214, 230);
+    const QColor cUnderbelly(168, 185, 205);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        const auto &cd = clouds[i];
+        const int cx = minMathX - 45 + ((hudTick / cd.speedDivider) + cd.tickOffset) % mathSpan;
+        const int cy = maxMathY + cd.relY;
+
+        // Draw grand multi-tiered chunky pixel cloud domes
+        for (int col = 0; col < cd.width; ++col)
+        {
+            // Triple overlapping dome curve profile
+            const double norm = static_cast<double>(col) / cd.width;
+            double domeProfile = 0.0;
+
+            // Left dome (peaks at 25%)
+            const double d1 = (norm - 0.25) / 0.25;
+            if (std::abs(d1) < 1.0) domeProfile = std::max(domeProfile, 0.75 * (1.0 - d1 * d1));
+
+            // Central grand dome (peaks at 55%)
+            const double d2 = (norm - 0.55) / 0.32;
+            if (std::abs(d2) < 1.0) domeProfile = std::max(domeProfile, 1.00 * (1.0 - d2 * d2));
+
+            // Right dome (peaks at 82%)
+            const double d3 = (norm - 0.82) / 0.20;
+            if (std::abs(d3) < 1.0) domeProfile = std::max(domeProfile, 0.65 * (1.0 - d3 * d3));
+
+            const int domeH = std::max(2, static_cast<int>(std::round(domeProfile * (cd.height - 1))) + 1);
+
+            for (int r = 0; r < domeH; ++r)
+            {
+                const int mx = cx + col;
+                const int my = cy + r;
+                QColor pixCol = cBody;
+                if (r >= domeH - 2)
+                {
+                    pixCol = cHighlight; // Bright white top crest
+                }
+                else if (r == 0)
+                {
+                    pixCol = cUnderbelly; // Atmospheric base shadow
+                }
+                else if (r <= 2)
+                {
+                    pixCol = cShade; // Soft lavender-grey shade
+                }
+
+                const int sx = grid.mathToScreenX(mx);
+                const int sy = grid.mathToScreenY(my);
+                painter.fillRect(sx, sy, scale, scale, pixCol);
+            }
+        }
+    }
+}
+
+void GameRenderer::renderPixelHills(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
+                                   int minMathX, int maxMathX, int groundMathY)
+{
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+
+    // Soft atmospheric mountain ridges (hazier and brighter)
+    const QColor farHillCol(138, 165, 186);   // Soft hazy blue mountain ridge
+    const QColor nearHillCol(104, 144, 118);  // Soft atmospheric sage green
+    const QColor nearHillRidge(122, 162, 136);// Ridge highlight
+    const QColor pineNeedles(80, 115, 92);    // Muted spruce
+    const QColor pineTrunk(95, 75, 65);
+
+    // 1. Layer 1: Distant Rolling Blue-Grey Mountain Ridge (highest altitude in background)
+    for (int mx = minMathX; mx <= maxMathX; ++mx)
+    {
+        const int hTop = groundMathY + 22 + static_cast<int>(std::sin((mx + 40) * 0.045) * 6.0 + std::cos(mx * 0.08) * 4.0);
+        for (int my = hTop; my > groundMathY + 9; --my)
+        {
+            const int sx = grid.mathToScreenX(mx);
+            const int sy = grid.mathToScreenY(my);
+            painter.fillRect(sx, sy, scale, scale, farHillCol);
+        }
+    }
+
+    // 2. Layer 2: Near Hazy Sage Foothills Ridge
+    for (int mx = minMathX; mx <= maxMathX; ++mx)
+    {
+        const int hTop = groundMathY + 16 + static_cast<int>(std::sin((mx - 15) * 0.055) * 5.0 + std::sin(mx * 0.11) * 2.5);
+        for (int my = hTop; my > groundMathY + 9; --my)
+        {
+            const QColor c = (my == hTop) ? nearHillRidge : nearHillCol;
+            const int sx = grid.mathToScreenX(mx);
+            const int sy = grid.mathToScreenY(my);
+            painter.fillRect(sx, sy, scale, scale, c);
+        }
+
+        // Little pixel pine trees dotting the foothills ridge
+        if ((mx % 16 == 0) && mx > minMathX + 6 && mx < maxMathX - 6)
+        {
+            const int treeY = hTop;
+            const int tx = grid.mathToScreenX(mx);
+            const int ty = grid.mathToScreenY(treeY + 1);
+            painter.fillRect(tx, ty, scale, scale, pineTrunk);
+
+            for (int row = 0; row < 3; ++row)
+            {
+                const int w = (row == 0 ? 3 : (row == 1 ? 2 : 1));
+                for (int dx = -w / 2; dx <= w / 2; ++dx)
+                {
+                    const int px = grid.mathToScreenX(mx + dx);
+                    const int py = grid.mathToScreenY(treeY + 2 + row);
+                    painter.fillRect(px, py, scale, scale, pineNeedles);
+                }
+            }
+        }
+    }
+}
+
+void GameRenderer::renderPixelFarmhouse(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
+                                       int groundMathY, int hudTick)
+{
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+
+    // -------------------------------------------------------------
+    // PERSPECTIVE VIEW: Elevated Midground Knoll & Plateau
+    // The house sits on a raised pasture terrace at hy = groundMathY + 9
+    // (distinctly higher than the foreground basket, but below the hills)
+    // -------------------------------------------------------------
+    const int knollBaseY = groundMathY + 9;
+    const int hx = -42;
+    const int hy = knollBaseY + 1; // Base of farmhouse resting on the elevated knoll
+
+    auto drawPix = [&](int x, int y, const QColor &c) {
+        const int sx = grid.mathToScreenX(x);
+        const int sy = grid.mathToScreenY(y);
+        painter.fillRect(sx, sy, scale, scale, c);
+    };
+
+    auto drawBlock = [&](int x, int y, int w, int h, const QColor &c) {
+        for (int dy = 0; dy < h; ++dy)
+        {
+            for (int dx = 0; dx < w; ++dx)
+            {
+                drawPix(x + dx, y + dy, c);
+            }
+        }
+    };
+
+    // 1. ELEVATED MIDGROUND KNOLL & TERRACE BANKS (Stepping down to foreground)
+    const QColor knollGrass(88, 134, 98);
+    const QColor knollGrassHi(105, 155, 116);
+    const QColor knollBank(72, 115, 82);
+    const QColor knollPath(140, 125, 105);
+
+    const int minMathX = grid.screenToMathX(0);
+    const int maxMathX = grid.screenToMathX(width);
+
+    // Draw the elevated pasture knoll shelf across the midground
+    for (int mx = minMathX; mx <= maxMathX; ++mx)
+    {
+        // Gentle undulating knoll profile (peaks around the farmhouse)
+        const int knollTop = knollBaseY + static_cast<int>(std::sin((mx + 45) * 0.04) * 2.0);
+        for (int my = knollTop; my > groundMathY; --my)
+        {
+            QColor c = knollBank;
+            if (my == knollTop)
+            {
+                c = knollGrassHi;
+            }
+            else if (my > knollTop - 3)
+            {
+                c = knollGrass;
+            }
+            drawPix(mx, my, c);
+        }
+    }
+
+    // Gentle dirt path winding down from the barn towards the right
+    for (int step = 0; step < 18; ++step)
+    {
+        const int px = hx + 10 + step;
+        const int py = hy - 1 - (step / 3);
+        if (py > groundMathY)
+        {
+            drawPix(px, py, knollPath);
+            drawPix(px, py - 1, knollPath);
+        }
+    }
+
+    // 2. MIDGROUND FARMHOUSE & SILO (Scaled to 75% for true perspective depth)
+    // Soft, slightly muted rustic palette with atmospheric perspective
+    const QColor barnRed(180, 75, 75);
+    const QColor barnRedDark(148, 55, 55);
+    const QColor barnTrim(240, 243, 246);
+    const QColor roofCharcoal(72, 86, 98);
+    const QColor roofShingle(88, 102, 115);
+    const QColor doorWood(82, 58, 48);
+    const QColor windowGold(255, 193, 7);
+    const QColor windowAmber(255, 215, 64);
+    const QColor chimneyStoneA(118, 138, 148);
+    const QColor chimneyStoneB(140, 160, 170);
+    const QColor chimneyCap(75, 90, 100);
+    const QColor siloBodyA(162, 180, 192);
+    const QColor siloBodyB(196, 210, 220);
+    const QColor siloShadow(125, 145, 158);
+    const QColor siloRib(95, 115, 128);
+    const QColor hayGold(240, 195, 65);
+    const QColor hayTie(215, 140, 35);
+
+    // SILO (Width 6, Height 18, sitting in midground perspective)
+    const int sx0 = hx + 19;
+    const int sw = 6;
+    for (int y = hy; y <= hy + 14; ++y)
+    {
+        const bool isRib = ((y - hy) % 3 == 0);
+        for (int x = sx0; x < sx0 + sw; ++x)
+        {
+            if (isRib)
+            {
+                drawPix(x, y, siloRib);
+            }
+            else
+            {
+                const int col = x - sx0;
+                if (col == 0) drawPix(x, y, siloShadow);
+                else if (col <= 2) drawPix(x, y, siloBodyA);
+                else if (col <= 4) drawPix(x, y, siloBodyB);
+                else drawPix(x, y, siloShadow);
+            }
+        }
+    }
+    // Silo domed roof
+    for (int dy = 0; dy < 3; ++dy)
+    {
+        const int domeInset = (dy == 0 ? 0 : 1);
+        for (int x = sx0 + domeInset; x < sx0 + sw - domeInset; ++x)
+        {
+            drawPix(x, hy + 15 + dy, (dy == 2 ? siloRib : siloBodyA));
+        }
+    }
+
+    // MAIN RED BARN (Width 17, Height 12)
+    const int bw = 17;
+    for (int y = hy; y < hy + 11; ++y)
+    {
+        for (int x = hx; x < hx + bw; ++x)
+        {
+            if ((x - hx) == 0 || (x - hx) == bw - 1)
+            {
+                drawPix(x, y, barnTrim); // Corner trim columns
+            }
+            else if ((x - hx) % 3 == 0)
+            {
+                drawPix(x, y, barnRedDark);
+            }
+            else
+            {
+                drawPix(x, y, barnRed);
+            }
+        }
+    }
+
+    // BARN DOUBLE DOORS with White "X" cross-timbers
+    const int dx0 = hx + 5;
+    const int dw = 6;
+    const int dh = 6;
+    drawBlock(dx0, hy, dw, dh, doorWood);
+    for (int r = 0; r < dh; ++r)
+    {
+        drawPix(dx0 + r, hy + r, barnTrim);
+        drawPix(dx0 + dw - 1 - r, hy + r, barnTrim);
+    }
+    drawBlock(dx0, hy + dh - 1, dw, 1, barnTrim);
+
+    // UPPER LOFT GLOWING WINDOW
+    const int ux = hx + 7;
+    const int uy = hy + 7;
+    drawBlock(ux, uy, 3, 3, barnTrim);
+    drawPix(ux + 1, uy + 1, windowAmber);
+    drawPix(ux + 1, uy + 2, windowGold);
+
+    // BARN GAMBREL ROOF (Stepped charcoal shingles with white eaves)
+    const int roofH = 5;
+    for (int r = 0; r < roofH; ++r)
+    {
+        const int ry = hy + 11 + r;
+        const int inset = r;
+        const int rx0 = hx - 1 + inset;
+        const int rx1 = hx + bw - inset;
+
+        drawPix(rx0, ry, barnTrim);
+        drawPix(rx1, ry, barnTrim);
+
+        for (int x = rx0 + 1; x < rx1; ++x)
+        {
+            drawPix(x, ry, (r % 2 == 0) ? roofCharcoal : roofShingle);
+        }
+    }
+
+    // Weather Vane on Roof Apex (Brass Rooster)
+    const int apexX = hx + bw / 2;
+    const int apexY = hy + 11 + roofH;
+    drawPix(apexX, apexY, barnTrim);
+    drawPix(apexX, apexY + 1, QColor(243, 156, 18));
+    drawPix(apexX, apexY + 2, QColor(243, 156, 18));
+    drawPix(apexX + 1, apexY + 2, QColor(230, 126, 34));
+
+    // STONE CHIMNEY with Animated Pixel Smoke
+    const int cx0 = hx - 3;
+    const int cw = 2;
+    const int ch = 15;
+    for (int y = hy; y < hy + ch; ++y)
+    {
+        for (int x = cx0; x < cx0 + cw; ++x)
+        {
+            drawPix(x, y, ((x + y) % 2 == 0) ? chimneyStoneA : chimneyStoneB);
+        }
+    }
+    drawBlock(cx0 - 1, hy + ch, cw + 2, 1, chimneyCap);
+
+    // Animated chunky pixel smoke puffs drifting into the sky
+    for (int puff = 0; puff < 3; ++puff)
+    {
+        const int offset = (hudTick + puff * 15) % 45;
+        const int smkX = cx0 + 1 + (offset / 8);
+        const int smkY = hy + ch + 1 + (offset / 2);
+        const int smkW = 2 + (puff % 2);
+        const QColor smkCol(245, 248, 252, std::max(50, 220 - offset * 4));
+
+        for (int dy = 0; dy < 2; ++dy)
+        {
+            for (int dx = 0; dx < smkW; ++dx)
+            {
+                drawPix(smkX + dx, smkY + dy, smkCol);
+            }
+        }
+    }
+
+    // Golden Hay Bales beside Silo
+    const int hbx = sx0 + sw + 2;
+    drawBlock(hbx, hy, 3, 2, hayGold);
+    drawPix(hbx + 1, hy + 1, hayTie);
+    drawBlock(hbx + 4, hy, 3, 2, hayGold);
+    drawPix(hbx + 5, hy + 1, hayTie);
+}
+
+void GameRenderer::renderPixelFence(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
+                                   int minMathX, int maxMathX, int groundMathY)
+{
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+
+    auto drawPix = [&](int x, int y, const QColor &c) {
+        const int sx = grid.mathToScreenX(x);
+        const int sy = grid.mathToScreenY(y);
+        painter.fillRect(sx, sy, scale, scale, c);
+    };
+
+    // Rustic wooden fence along the knoll rim in the midground
+    const QColor fencePost(102, 72, 60);
+    const QColor fenceRail(135, 102, 90);
+    const int knollBaseY = groundMathY + 9;
+
+    for (int mx = minMathX; mx <= maxMathX; ++mx)
+    {
+        // Don't block the barn front path (-42 to -22)
+        if (mx >= -42 && mx <= -20)
+        {
+            continue;
+        }
+
+        const int fy = knollBaseY + static_cast<int>(std::sin((mx + 45) * 0.04) * 2.0);
+
+        // Horizontal rails
+        drawPix(mx, fy + 3, fenceRail);
+        drawPix(mx, fy + 1, fenceRail);
+
+        // Vertical posts every 8 units
+        if (mx % 8 == 0)
+        {
+            for (int h = 0; h < 5; ++h)
+            {
+                drawPix(mx, fy + h, fencePost);
+            }
+        }
+    }
+}
+
 QPixmap GameRenderer::renderFrame(const GameEngine &engine,
                                   MyGrid &grid,
                                   MyPixels &pixels,
@@ -184,30 +653,51 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     QPixmap pix(width, height);
-    pix.fill(QColor(14, 17, 24)); // Dark arcade night canvas
     QPainter painter(&pix);
+    painter.setRenderHint(QPainter::Antialiasing, false);
 
     grid.setDimensions(width, height);
     grid.setScale(scale);
-
-    // 1. Clear raster pixel buffer and rasterize all game entities
-    pixels.clear();
 
     const int minMathX = grid.screenToMathX(0);
     const int maxMathX = grid.screenToMathX(width);
     const int minMathY = grid.screenToMathY(height);
     const int maxMathY = grid.screenToMathY(0);
 
-    // Rasterize Ground
+    // -------------------------------------------------------------
+    // BACKGROUND PASS: 100% Pure Pixelated World (Zero Smooth Drawing)
+    // Brighter & Hazier Atmospheric Depth with Elevated Midground Knoll
+    // -------------------------------------------------------------
+    // 1. Pixelated Sky with stepped pastel daylight color bands and dithering
+    renderPixelSky(painter, grid, scale, width, height, minMathX, maxMathX, minMathY, maxMathY, engine.getGroundMathY());
+
+    // 2. Grand, puffy pixel clouds drifting across the sky
+    renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, hudTick);
+
+    // 3. Soft distant mountain ridges with evergreen tree silhouettes
+    renderPixelHills(painter, grid, scale, width, height, minMathX, maxMathX, engine.getGroundMathY());
+
+    // 4. Perspective view: Farmhouse & barn elevated on midground pasture knoll
+    renderPixelFarmhouse(painter, grid, scale, width, height, engine.getGroundMathY(), hudTick);
+
+    // 5. Midground rustic split-rail wooden fence
+    renderPixelFence(painter, grid, scale, width, height, minMathX, maxMathX, engine.getGroundMathY());
+
+    // -------------------------------------------------------------
+    // FOREGROUND RASTERIZATION PASS (Crisp, Highlighted, Phosphor Glow)
+    // -------------------------------------------------------------
+    pixels.clear();
+
+    // Rasterize Foreground Ground (Lush, saturated grass and rich soil)
     rasterizeGround(pixels, minMathX, maxMathX, engine.getGroundMathY(), minMathY);
 
-    // Rasterize Birds
+    // Rasterize Birds (Enlarged 15x9 sprites with 3-frame animated wings)
     for (const auto &bird : engine.getBirds())
     {
         rasterizeBird(pixels, bird);
     }
 
-    // Rasterize Basket
+    // Rasterize Basket (Enlarged woven wicker basket)
     rasterizeBasket(pixels, engine.getBasket());
 
     // Rasterize Falling Egg
@@ -223,7 +713,9 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     // Rasterize Level Progress Bar in the top-right
     rasterizeLevelBar(pixels, maxMathX - 40, maxMathX - 3, maxMathY - 2, engine.getLevel(), engine.getScore(), hudTick);
 
-    // 2. PASS 1: Pixel Glow Aura Pass (glowing aura radiating beyond cells without any grid lines)
+    // -------------------------------------------------------------
+    // PASS 1: Pixel Glow Aura Pass (Radial glowing aura radiating beyond cells)
+    // -------------------------------------------------------------
     const int glowRadius = (scale <= 3 ? 1 : (scale <= 6 ? 2 : 3));
     const int glowAlpha = (scale <= 3 ? 32 : 45);
 
@@ -234,11 +726,37 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         const int ey = grid.mathToScreenY(static_cast<int>(std::round(egg.mathY)));
         const int auraR = scale * 7;
         QRadialGradient goldGlow(ex + scale / 2.0, ey + scale / 2.0, auraR);
-        goldGlow.setColorAt(0.0, QColor(255, 215, 0, 75));
-        goldGlow.setColorAt(0.4, QColor(255, 190, 0, 28));
+        goldGlow.setColorAt(0.0, QColor(255, 215, 0, 80));
+        goldGlow.setColorAt(0.4, QColor(255, 190, 0, 30));
         goldGlow.setColorAt(1.0, QColor(255, 180, 0, 0));
         painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, goldGlow);
     }
+    // Special glowing aura for Basket Growth Egg
+    else if (egg.active && egg.type == EggType::BASKET_GROW)
+    {
+        const int ex = grid.mathToScreenX(static_cast<int>(std::round(egg.mathX)));
+        const int ey = grid.mathToScreenY(static_cast<int>(std::round(egg.mathY)));
+        const int auraR = scale * 7;
+        QRadialGradient growGlow(ex + scale / 2.0, ey + scale / 2.0, auraR);
+        growGlow.setColorAt(0.0, QColor(46, 204, 113, 85));
+        growGlow.setColorAt(0.4, QColor(39, 174, 96, 30));
+        growGlow.setColorAt(1.0, QColor(39, 174, 96, 0));
+        painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, growGlow);
+    }
+    // Special glowing radiant aura for Legendary Restoration Egg
+    else if (egg.active && egg.type == EggType::BASKET_RESTORE)
+    {
+        const int ex = grid.mathToScreenX(static_cast<int>(std::round(egg.mathX)));
+        const int ey = grid.mathToScreenY(static_cast<int>(std::round(egg.mathY)));
+        const int auraR = scale * 8;
+        QRadialGradient restoreGlow(ex + scale / 2.0, ey + scale / 2.0, auraR);
+        restoreGlow.setColorAt(0.0, QColor(0, 229, 255, 95));
+        restoreGlow.setColorAt(0.35, QColor(233, 30, 99, 50));
+        restoreGlow.setColorAt(0.7, QColor(255, 235, 59, 25));
+        restoreGlow.setColorAt(1.0, QColor(156, 39, 176, 0));
+        painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, restoreGlow);
+    }
+    // Special glowing aura for Bomb
     else if (egg.active && egg.type == EggType::BOMB)
     {
         const int ex = grid.mathToScreenX(static_cast<int>(std::round(egg.mathX)));
@@ -282,7 +800,9 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.fillRect(sx - pGlowR, sy - pGlowR, scale + 2 * pGlowR, scale + 2 * pGlowR, pGlowColor);
     }
 
-    // 3. PASS 2: Pixel Core Pass (draws crisp solid cells with inner phosphor brightness, no grid lines)
+    // -------------------------------------------------------------
+    // PASS 2: Pixel Core Pass (Solid crisp cells with phosphor highlight)
+    // -------------------------------------------------------------
     for (const auto &entry : pixels.getPixelMap())
     {
         const int x = static_cast<int>(entry.first >> 32);
@@ -299,7 +819,9 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
                   p.color);
     }
 
-    // 4. Paint Floating Texts
+    // -------------------------------------------------------------
+    // FLOATING TEXTS & HUD LABELS
+    // -------------------------------------------------------------
     QFont font("Segoe UI", 12, QFont::Bold);
     painter.setFont(font);
     for (const auto &t : engine.getFloatingTexts())
@@ -313,7 +835,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.drawText(sx - 40, sy, t.text);
     }
 
-    // 5. Draw Progress Bar Text below the bar
+    // Draw Progress Bar Text below the bar
     const int level = engine.getLevel();
     const int score = engine.getScore();
     if (engine.getState() == GameState::PLAYING)
@@ -322,7 +844,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         const int levelStart = (level - 1) * GameEngine::POINTS_PER_LEVEL;
         const int earned = maxed ? GameEngine::POINTS_PER_LEVEL : std::clamp(score - levelStart, 0, GameEngine::POINTS_PER_LEVEL);
         const int remaining = GameEngine::POINTS_PER_LEVEL - earned;
-        const QString progressLabel = maxed ? QString("MAX LEVEL")
+        const QString progressLabel = maxed ? QString("MAX LEVEL (50)")
                                             : QString("%1 PTS TO NEXT LEVEL").arg(remaining);
 
         QFont progressFont("Segoe UI", 9, QFont::Bold);
@@ -339,7 +861,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.drawText(QRect(sx, sy, barW, 20), Qt::AlignCenter, progressLabel);
     }
 
-    // 6. Level-up banner (fades out)
+    // Level-up banner (fades out)
     const int bannerTicks = engine.getLevelBannerTicks();
     if (bannerTicks > 0 && engine.getState() == GameState::PLAYING)
     {
@@ -356,13 +878,13 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.setFont(subFont);
         painter.setPen(QColor(224, 230, 237, alpha));
         painter.drawText(QRect(0, height / 3 + 25, width, 30), Qt::AlignCenter,
-                         "Faster eggs • More bombs • Smaller basket");
+                         "Faster eggs • More frequent drops • Smaller basket");
     }
 
-    // 7. Overlays for Game Over and Paused
+    // Overlays for Game Over and Paused
     if (engine.getState() == GameState::GAME_OVER)
     {
-        painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 210));
+        painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 215));
 
         painter.setPen(QColor(239, 71, 111));
         QFont titleFont("Segoe UI", 32, QFont::Bold);
@@ -389,7 +911,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
     else if (engine.getState() == GameState::PAUSED)
     {
-        painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 175));
+        painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 180));
 
         painter.setPen(QColor(255, 209, 102));
         QFont pauseFont("Segoe UI", 28, QFont::Bold);

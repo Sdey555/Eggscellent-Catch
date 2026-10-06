@@ -35,7 +35,6 @@ private slots:
     void gameLoopTick();
     void on_btnRestart_clicked();
     void on_btnPause_clicked();
-    void on_spinScale_valueChanged(int val);
     void onGridPanned(int dx, int dy);
 
     // Mouse controls

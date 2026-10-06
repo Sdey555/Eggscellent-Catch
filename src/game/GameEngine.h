@@ -18,7 +18,7 @@ class MyGrid;
 class GameEngine
 {
 public:
-    static constexpr int MAX_LEVEL = 10;
+    static constexpr int MAX_LEVEL = 50;
     static constexpr int POINTS_PER_LEVEL = 100;
 
     GameEngine();
@@ -64,6 +64,8 @@ private:
     int hearts{3};
     int level{1};
     int levelBannerTicks{0};
+    int lastRestoreEggLevel{0};
+    int lastGrowEggMissLevel{0};
     QString gameOverReason;
     QString statusMessage;
 
