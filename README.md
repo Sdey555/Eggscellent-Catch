@@ -59,7 +59,15 @@ src/
 ## Build and Run
 
 ### Run on Windows
-Launch `EggscellentCatch.exe` directly in the project root or inside `release/`. (Required Qt DLLs and platform plugins are bundled in both directories).
+Launch `EggscellentCatch-Portable.exe`. It is a single-file portable package that unpacks the game and its Qt runtime into a temporary folder, runs the game, and cleans up afterward. No Qt installation is needed. The package is for 64-bit Windows and requires Windows PowerShell (included with Windows).
+
+To recreate the portable package after building the release version, run:
+
+```powershell
+.\packaging\package-portable.ps1
+```
+
+The script requires a MinGW-w64 `g++` compiler on `PATH`. You can pass its path with `-Compiler` if needed. The regular Qt release executable and its runtime files are also available in `release/`.
 
 ### Build from Source (MinGW / Command Line)
 ```bash
