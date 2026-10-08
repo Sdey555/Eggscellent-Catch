@@ -38,6 +38,8 @@ public:
     // Accessors
     GameState getState() const { return gameState; }
     void setState(GameState s) { gameState = s; }
+    int getMenuSlideIndex() const { return menuSlideIndex; }
+    void setMenuSlideIndex(int idx) { menuSlideIndex = idx; }
     int getScore() const { return score; }
     int getHighScore() const { return highScore; }
     int getHearts() const { return hearts; }
@@ -58,7 +60,8 @@ public:
     double levelSpeedMultiplier() const;
 
 private:
-    GameState gameState{GameState::PLAYING};
+    GameState gameState{GameState::MENU};
+    int menuSlideIndex{0};
     int score{0};
     int highScore{0};
     int hearts{3};

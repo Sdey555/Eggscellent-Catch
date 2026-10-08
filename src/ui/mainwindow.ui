@@ -137,85 +137,6 @@ QCheckBox {
      <number>0</number>
     </property>
     <item>
-     <widget class="QFrame" name="topRibbon">
-      <property name="frameShape">
-       <enum>QFrame::Shape::NoFrame</enum>
-      </property>
-      <layout class="QHBoxLayout" name="ribbonLayout">
-       <property name="spacing">
-        <number>12</number>
-       </property>
-       <property name="leftMargin">
-        <number>12</number>
-       </property>
-       <property name="topMargin">
-        <number>6</number>
-       </property>
-       <property name="rightMargin">
-        <number>12</number>
-       </property>
-       <property name="bottomMargin">
-        <number>6</number>
-       </property>
-       <item>
-        <widget class="QLabel" name="lblTitle">
-         <property name="text">
-          <string>🥚 EGGSCELLENT CATCH</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="lblScore">
-         <property name="text">
-          <string>SCORE: 0</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="lblHighScore">
-         <property name="text">
-          <string>BEST: 0</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="lblHearts">
-         <property name="text">
-          <string>❤❤❤</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="lblStatus">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string>Ready! Catch eggs, avoid bombs!</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btnPause">
-         <property name="text">
-          <string>Pause</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btnRestart">
-         <property name="text">
-          <string>Restart (R)</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <item>
      <widget class="CanvasLabel" name="frame">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
@@ -224,23 +145,13 @@ QCheckBox {
        </sizepolicy>
       </property>
       <property name="cursor">
-       <cursorShape>CrossCursor</cursorShape>
+       <cursorShape>ArrowCursor</cursorShape>
       </property>
       <property name="focusPolicy">
        <enum>Qt::FocusPolicy::StrongFocus</enum>
       </property>
       <property name="text">
        <string/>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLabel" name="lblHelp">
-      <property name="text">
-       <string>Controls: [A / D] or [◄ / ►] Move Basket | [Space] Pause/Resume | [R] Restart | 🥚 Regular Egg (+10) | ⭐ Golden Egg (+50) | 💣 Bomb (Instant Game Over!) | 3 Misses = Game Over</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignmentFlag::AlignCenter</set>
       </property>
      </widget>
     </item>

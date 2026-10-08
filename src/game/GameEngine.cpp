@@ -13,7 +13,7 @@ void GameEngine::init(const MyGrid &grid)
 {
     score = 0;
     hearts = 3;
-    gameState = GameState::PLAYING;
+    gameState = GameState::MENU;
     gameOverReason.clear();
 
     keyLeftPressed = false;
@@ -82,17 +82,18 @@ void GameEngine::init(const MyGrid &grid)
     birds.push_back(b3);
 
     eggSpawnCooldown = 40;
-    statusMessage = "Catch eggs, avoid bombs, grow your basket!";
+    statusMessage = "Welcome to Eggscellent Catch! Press START to play.";
 }
 
 void GameEngine::reset(const MyGrid &grid)
 {
     init(grid);
+    gameState = GameState::PLAYING;
 }
 
 void GameEngine::togglePause()
 {
-    if (gameState == GameState::GAME_OVER)
+    if (gameState == GameState::GAME_OVER || gameState == GameState::MENU)
     {
         return;
     }
@@ -113,6 +114,10 @@ void GameEngine::tick(const MyGrid &grid)
     if (gameState == GameState::PLAYING)
     {
         updatePhysics(grid);
+    }
+    else if (gameState == GameState::MENU)
+    {
+        updateBirds(grid);
     }
 }
 

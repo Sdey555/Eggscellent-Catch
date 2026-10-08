@@ -10,6 +10,7 @@ enum class EggType {
 };
 
 enum class GameState {
+    MENU,
     PLAYING,
     PAUSED,
     GAME_OVER

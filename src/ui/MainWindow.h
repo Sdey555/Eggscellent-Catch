@@ -33,22 +33,21 @@ protected:
 
 private slots:
     void gameLoopTick();
-    void on_btnRestart_clicked();
-    void on_btnPause_clicked();
     void onGridPanned(int dx, int dy);
 
     // Mouse controls
     void onMouseMoved(QPoint &pos);
     void onMouseLeftClicked();
     void onMouseRightClicked();
+    void startGame();
 
 private:
     Ui::MainWindow *ui;
-    QLabel *lblLevel = nullptr;
     QTimer *gameTimer = nullptr;
 
     int scale = 4;
     int hudTick = 0;
+    int menuSlideIndex = 0;
 
     MyGrid myGrid;
     MyPixels myPixels;
@@ -59,6 +58,7 @@ private:
     void togglePause();
     void updateHUD();
     void redrawPixels();
+    void nextMenuSlide();
 };
 
 #endif // MAINWINDOW_H
