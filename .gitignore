@@ -9,3 +9,6 @@ debug/
 # Temporary / OS files
 Thumbs.db
 Desktop.ini
+
+# Android compatible version
+android/
