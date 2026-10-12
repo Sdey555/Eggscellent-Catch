@@ -11,11 +11,7 @@
 
 #include <QtCore/QVariant>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QFrame>
-#include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QLabel>
 #include <QtWidgets/QMainWindow>
-#include <QtWidgets/QPushButton>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
 #include "CanvasLabel.h"
@@ -27,17 +23,7 @@ class Ui_MainWindow
 public:
     QWidget *centralwidget;
     QVBoxLayout *mainVerticalLayout;
-    QFrame *topRibbon;
-    QHBoxLayout *ribbonLayout;
-    QLabel *lblTitle;
-    QLabel *lblScore;
-    QLabel *lblHighScore;
-    QLabel *lblHearts;
-    QLabel *lblStatus;
-    QPushButton *btnPause;
-    QPushButton *btnRestart;
     CanvasLabel *frame;
-    QLabel *lblHelp;
 
     void setupUi(QMainWindow *MainWindow)
     {
@@ -151,73 +137,17 @@ public:
         mainVerticalLayout->setSpacing(0);
         mainVerticalLayout->setObjectName("mainVerticalLayout");
         mainVerticalLayout->setContentsMargins(0, 0, 0, 0);
-        topRibbon = new QFrame(centralwidget);
-        topRibbon->setObjectName("topRibbon");
-        topRibbon->setFrameShape(QFrame::Shape::NoFrame);
-        ribbonLayout = new QHBoxLayout(topRibbon);
-        ribbonLayout->setSpacing(12);
-        ribbonLayout->setObjectName("ribbonLayout");
-        ribbonLayout->setContentsMargins(12, 6, 12, 6);
-        lblTitle = new QLabel(topRibbon);
-        lblTitle->setObjectName("lblTitle");
-
-        ribbonLayout->addWidget(lblTitle);
-
-        lblScore = new QLabel(topRibbon);
-        lblScore->setObjectName("lblScore");
-
-        ribbonLayout->addWidget(lblScore);
-
-        lblHighScore = new QLabel(topRibbon);
-        lblHighScore->setObjectName("lblHighScore");
-
-        ribbonLayout->addWidget(lblHighScore);
-
-        lblHearts = new QLabel(topRibbon);
-        lblHearts->setObjectName("lblHearts");
-
-        ribbonLayout->addWidget(lblHearts);
-
-        lblStatus = new QLabel(topRibbon);
-        lblStatus->setObjectName("lblStatus");
-        QSizePolicy sizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Preferred);
-        sizePolicy.setHorizontalStretch(0);
-        sizePolicy.setVerticalStretch(0);
-        sizePolicy.setHeightForWidth(lblStatus->sizePolicy().hasHeightForWidth());
-        lblStatus->setSizePolicy(sizePolicy);
-
-        ribbonLayout->addWidget(lblStatus);
-
-        btnPause = new QPushButton(topRibbon);
-        btnPause->setObjectName("btnPause");
-
-        ribbonLayout->addWidget(btnPause);
-
-        btnRestart = new QPushButton(topRibbon);
-        btnRestart->setObjectName("btnRestart");
-
-        ribbonLayout->addWidget(btnRestart);
-
-
-        mainVerticalLayout->addWidget(topRibbon);
-
         frame = new CanvasLabel(centralwidget);
         frame->setObjectName("frame");
-        QSizePolicy sizePolicy1(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Expanding);
-        sizePolicy1.setHorizontalStretch(1);
-        sizePolicy1.setVerticalStretch(1);
-        sizePolicy1.setHeightForWidth(frame->sizePolicy().hasHeightForWidth());
-        frame->setSizePolicy(sizePolicy1);
-        frame->setCursor(QCursor(Qt::CursorShape::CrossCursor));
+        QSizePolicy sizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Expanding);
+        sizePolicy.setHorizontalStretch(1);
+        sizePolicy.setVerticalStretch(1);
+        sizePolicy.setHeightForWidth(frame->sizePolicy().hasHeightForWidth());
+        frame->setSizePolicy(sizePolicy);
+        frame->setCursor(QCursor(Qt::CursorShape::ArrowCursor));
         frame->setFocusPolicy(Qt::FocusPolicy::StrongFocus);
 
         mainVerticalLayout->addWidget(frame);
-
-        lblHelp = new QLabel(centralwidget);
-        lblHelp->setObjectName("lblHelp");
-        lblHelp->setAlignment(Qt::AlignmentFlag::AlignCenter);
-
-        mainVerticalLayout->addWidget(lblHelp);
 
         MainWindow->setCentralWidget(centralwidget);
 
@@ -229,15 +159,7 @@ public:
     void retranslateUi(QMainWindow *MainWindow)
     {
         MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "Eggscellent Catch", nullptr));
-        lblTitle->setText(QCoreApplication::translate("MainWindow", "\360\237\245\232 EGGSCELLENT CATCH", nullptr));
-        lblScore->setText(QCoreApplication::translate("MainWindow", "SCORE: 0", nullptr));
-        lblHighScore->setText(QCoreApplication::translate("MainWindow", "BEST: 0", nullptr));
-        lblHearts->setText(QCoreApplication::translate("MainWindow", "\342\235\244\342\235\244\342\235\244", nullptr));
-        lblStatus->setText(QCoreApplication::translate("MainWindow", "Ready! Catch eggs, avoid bombs!", nullptr));
-        btnPause->setText(QCoreApplication::translate("MainWindow", "Pause", nullptr));
-        btnRestart->setText(QCoreApplication::translate("MainWindow", "Restart (R)", nullptr));
         frame->setText(QString());
-        lblHelp->setText(QCoreApplication::translate("MainWindow", "Controls: [A / D] or [\342\227\204 / \342\226\272] Move Basket | [Space] Pause/Resume | [R] Restart | \360\237\245\232 Regular Egg (+10) | \342\255\220 Golden Egg (+50) | \360\237\222\243 Bomb (Instant Game Over!) | 3 Misses = Game Over", nullptr));
     } // retranslateUi
 
 };

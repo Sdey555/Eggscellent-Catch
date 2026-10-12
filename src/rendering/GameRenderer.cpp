@@ -707,11 +707,12 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         rasterizeEgg(pixels, egg);
     }
 
-    // Rasterize Hearts in canvas top-left
-    rasterizePixelHearts(pixels, minMathX + 3, maxMathY - 3, engine.getHearts(), 3);
-
-    // Rasterize Level Progress Bar in the top-right
-    rasterizeLevelBar(pixels, maxMathX - 40, maxMathX - 3, maxMathY - 2, engine.getLevel(), engine.getScore(), hudTick);
+    // Rasterize Hearts in canvas top-left and level bar in top-right (when not in MENU)
+    if (engine.getState() != GameState::MENU)
+    {
+        rasterizePixelHearts(pixels, minMathX + 3, maxMathY - 3, engine.getHearts(), 3);
+        rasterizeLevelBar(pixels, maxMathX - 40, maxMathX - 3, maxMathY - 2, engine.getLevel(), engine.getScore(), hudTick);
+    }
 
     // -------------------------------------------------------------
     // PASS 1: Pixel Glow Aura Pass (Radial glowing aura radiating beyond cells)
@@ -835,11 +836,43 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.drawText(sx - 40, sy, t.text);
     }
 
-    // Draw Progress Bar Text below the bar
+    // Draw HUD text and Level Bar text
     const int level = engine.getLevel();
     const int score = engine.getScore();
-    if (engine.getState() == GameState::PLAYING)
+    if (engine.getState() == GameState::PLAYING || engine.getState() == GameState::PAUSED)
     {
+        // 1. Draw Level, Score, and High Score directly below the three hearts (top-left)
+        const int heartsStartX = grid.mathToScreenX(minMathX + 3);
+        const int heartsBottomY = grid.mathToScreenY(maxMathY - 7);
+        const int hudLeftX = heartsStartX;
+        const int hudStartY = heartsBottomY + 28; // Lowered as requested
+
+        // Level Number
+        QFont hudLevelFont("Segoe UI", 11, QFont::Bold);
+        painter.setFont(hudLevelFont);
+        QString levelStr = QString("LEVEL %1").arg(level);
+        painter.setPen(QColor(0, 0, 0, 200));
+        painter.drawText(hudLeftX + 1, hudStartY + 1, levelStr);
+        painter.setPen(QColor(199, 125, 255)); // Lavender purple
+        painter.drawText(hudLeftX, hudStartY, levelStr);
+
+        // Current Score
+        QFont hudScoreFont("Segoe UI", 10, QFont::Bold);
+        painter.setFont(hudScoreFont);
+        QString scoreStr = QString("SCORE: %1").arg(score);
+        painter.setPen(QColor(0, 0, 0, 200));
+        painter.drawText(hudLeftX + 1, hudStartY + 18, scoreStr);
+        painter.setPen(QColor(6, 214, 160)); // Emerald green
+        painter.drawText(hudLeftX, hudStartY + 17, scoreStr);
+
+        // Best Score
+        QString bestStr = QString("BEST: %1").arg(engine.getHighScore());
+        painter.setPen(QColor(0, 0, 0, 200));
+        painter.drawText(hudLeftX + 1, hudStartY + 35, bestStr);
+        painter.setPen(QColor(255, 183, 3)); // Warm gold
+        painter.drawText(hudLeftX, hudStartY + 34, bestStr);
+
+        // 2. Draw Progress Bar Text below the bar (top-right)
         const bool maxed = level >= GameEngine::MAX_LEVEL;
         const int levelStart = (level - 1) * GameEngine::POINTS_PER_LEVEL;
         const int earned = maxed ? GameEngine::POINTS_PER_LEVEL : std::clamp(score - levelStart, 0, GameEngine::POINTS_PER_LEVEL);
@@ -881,8 +914,172 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
                          "Faster eggs • More frequent drops • Smaller basket");
     }
 
-    // Overlays for Game Over and Paused
-    if (engine.getState() == GameState::GAME_OVER)
+    // Overlays for Start Menu, Game Over, and Paused
+    if (engine.getState() == GameState::MENU)
+    {
+        // 1. Semi-transparent dark atmospheric backdrop over animated pixel sky
+        painter.fillRect(0, 0, width, height, QColor(10, 13, 20, 228));
+
+        // 2. Card Dimensions (smaller as per request)
+        const int cardW = std::min(width - 40, 500);
+        const int cardH = std::min(height - 40, 360);
+        const int cardX = (width - cardW) / 2;
+        const int cardY = (height - cardH) / 2;
+
+        // Card Frame
+        painter.setPen(QPen(QColor(48, 58, 80), 2));
+        painter.setBrush(QColor(20, 24, 36, 248));
+        painter.drawRoundedRect(cardX, cardY, cardW, cardH, 12, 12);
+
+        // Header Accent line
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 209, 102));
+        painter.drawRoundedRect(cardX + 24, cardY + 70, cardW - 48, 2, 1, 1);
+
+        // Title: EGGSCELLENT CATCH
+        QFont titleFont("Segoe UI", 26, QFont::Black);
+        painter.setFont(titleFont);
+        painter.setPen(QColor(0, 0, 0, 200));
+        painter.drawText(QRect(cardX + 2, cardY + 16, cardW, 40), Qt::AlignCenter, "EGGSCELLENT CATCH");
+        painter.setPen(QColor(255, 209, 102));
+        painter.drawText(QRect(cardX, cardY + 14, cardW, 40), Qt::AlignCenter, "EGGSCELLENT CATCH");
+
+        QFont subFont("Segoe UI", 11, QFont::DemiBold);
+        painter.setFont(subFont);
+        painter.setPen(QColor(168, 199, 250));
+        painter.drawText(QRect(cardX, cardY + 50, cardW, 18), Qt::AlignCenter, "FARM FRENZY EDITION"); // Changed theme subtitle
+
+        // Single Column Content based on slide index
+        const int colX = cardX + 30;
+        int y = cardY + 94;
+
+        QFont secFont("Segoe UI", 12, QFont::Bold);
+        QFont bodyFont("Segoe UI", 11, QFont::Normal);
+        QFont boldBodyFont("Segoe UI", 11, QFont::Bold);
+
+        int slideIndex = engine.getMenuSlideIndex();
+
+        if (slideIndex == 0)
+        {
+            // --- Slide 0: HOW TO PLAY ---
+            painter.setFont(secFont);
+            painter.setPen(QColor(6, 214, 160)); // Emerald
+            painter.drawText(colX, y, "HOW TO PLAY");
+            y += 28;
+
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(224, 230, 237));
+            painter.drawText(colX, y, "• Catch falling eggs before they hit the ground!");
+            y += 24;
+            painter.drawText(colX, y, "• 3 missed eggs = Game Over (lose hearts).");
+            y += 24;
+            painter.drawText(colX, y, "• Avoid bombs! Catching a bomb is fatal.");
+            y += 24;
+            painter.drawText(colX, y, "• Level up every 100 points:");
+            y += 24;
+            painter.setFont(boldBodyFont);
+            painter.setPen(QColor(199, 125, 255));
+            painter.drawText(colX + 16, y, "Eggs fall faster & basket shrinks!");
+        }
+        else if (slideIndex == 1)
+        {
+            // --- Slide 1: CONTROLS ---
+            painter.setFont(secFont);
+            painter.setPen(QColor(199, 125, 255)); // Purple
+            painter.drawText(colX, y, "CONTROLS");
+            y += 28;
+
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(224, 230, 237));
+            painter.drawText(colX, y, "• Move Basket : Mouse or [A / D] / [Left / Right]");
+            y += 24;
+            painter.drawText(colX, y, "• Next Slide in Menu : [→] Right Arrow Key");
+            y += 24;
+            painter.drawText(colX, y, "• Start Game : [SPACE] or [ENTER]");
+            y += 24;
+            painter.drawText(colX, y, "• Pause / Resume : [SPACE]");
+            y += 24;
+            painter.drawText(colX, y, "• Restore / Restart : [R]");
+        }
+        else if (slideIndex == 2)
+        {
+            // --- Slide 2: POINTS PER EGG ---
+            painter.setFont(secFont);
+            painter.setPen(QColor(255, 183, 3)); // Gold
+            painter.drawText(colX, y, "POINTS PER EGG");
+            y += 24;
+
+            int lineH = 22;
+            
+            // Regular Egg
+            painter.setFont(boldBodyFont);
+            painter.setPen(QColor(255, 255, 255));
+            painter.drawText(colX, y, "[O] Regular");
+            painter.setPen(QColor(6, 214, 160));
+            painter.drawText(colX + 120, y, "+10 pts");
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(156, 168, 184));
+            painter.drawText(colX + 190, y, "Standard egg");
+            y += lineH;
+
+            // Golden Egg
+            painter.setFont(boldBodyFont);
+            painter.setPen(QColor(255, 215, 0));
+            painter.drawText(colX, y, "[*] Golden");
+            painter.setPen(QColor(255, 215, 0));
+            painter.drawText(colX + 120, y, "+50 pts");
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(156, 168, 184));
+            painter.drawText(colX + 190, y, "Rare bonus");
+            y += lineH;
+
+            // Bomb
+            painter.setFont(boldBodyFont);
+            painter.setPen(QColor(239, 71, 111));
+            painter.drawText(colX, y, "[X] Bomb");
+            painter.setPen(QColor(239, 71, 111));
+            painter.drawText(colX + 120, y, "FATAL");
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(156, 168, 184));
+            painter.drawText(colX + 190, y, "Instant Game Over!");
+            y += lineH;
+
+            // Growth Egg
+            painter.setFont(boldBodyFont);
+            painter.setPen(QColor(46, 204, 113));
+            painter.drawText(colX, y, "[+] Growth");
+            painter.setPen(QColor(46, 204, 113));
+            painter.drawText(colX + 120, y, "+25 pts");
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(156, 168, 184));
+            painter.drawText(colX + 190, y, "Widens basket by +2");
+            y += lineH;
+
+            // Restore Egg
+            painter.setFont(boldBodyFont);
+            painter.setPen(QColor(0, 229, 255));
+            painter.drawText(colX, y, "[^] Restore");
+            painter.setPen(QColor(0, 229, 255));
+            painter.drawText(colX + 120, y, "+100 pts");
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(156, 168, 184));
+            painter.drawText(colX + 190, y, "Restores basket to max");
+        }
+
+        // Bottom Navigation and Start Hints
+        QFont navFont("Segoe UI", 10, QFont::Bold);
+        painter.setFont(navFont);
+        painter.setPen(QColor(255, 209, 102));
+        QString slideIndicator = QString("Page %1 of 3   •   Press [→] to see next").arg(slideIndex + 1);
+        painter.drawText(QRect(cardX, cardY + cardH - 60, cardW, 22), Qt::AlignCenter, slideIndicator);
+
+        QFont hintFont("Segoe UI", 12, QFont::Bold);
+        painter.setFont(hintFont);
+        painter.setPen(QColor(6, 214, 160));
+        painter.drawText(QRect(cardX, cardY + cardH - 34, cardW, 24), Qt::AlignCenter,
+                         "Press [SPACE] or [ENTER] to Start");
+    }
+    else if (engine.getState() == GameState::GAME_OVER)
     {
         painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 215));
 
@@ -907,7 +1104,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         QFont promptFont("Segoe UI", 13, QFont::Normal);
         painter.setFont(promptFont);
         painter.drawText(QRect(0, height / 2 + 60, width, 30), Qt::AlignCenter,
-                         "Click, press [SPACE] or [R], or click 'Restart' to play again!");
+                         "Press [R] to restore / restart or [SPACE] to play again");
     }
     else if (engine.getState() == GameState::PAUSED)
     {
@@ -922,7 +1119,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         QFont promptFont("Segoe UI", 13, QFont::Normal);
         painter.setFont(promptFont);
         painter.drawText(QRect(0, height / 2 + 15, width, 30), Qt::AlignCenter,
-                         "Click, press [SPACE], or click 'Resume' to continue");
+                         "Press [SPACE] to resume or [R] to restore / restart");
     }
 
     painter.end();

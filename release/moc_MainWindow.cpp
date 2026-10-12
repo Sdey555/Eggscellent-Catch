@@ -41,8 +41,6 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "MainWindow",
         "gameLoopTick",
         "",
-        "on_btnRestart_clicked",
-        "on_btnPause_clicked",
         "onGridPanned",
         "dx",
         "dy",
@@ -50,28 +48,27 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "QPoint&",
         "pos",
         "onMouseLeftClicked",
-        "onMouseRightClicked"
+        "onMouseRightClicked",
+        "startGame"
     };
 
     QtMocHelpers::UintData qt_methods {
         // Slot 'gameLoopTick'
         QtMocHelpers::SlotData<void()>(1, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'on_btnRestart_clicked'
-        QtMocHelpers::SlotData<void()>(3, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'on_btnPause_clicked'
-        QtMocHelpers::SlotData<void()>(4, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onGridPanned'
-        QtMocHelpers::SlotData<void(int, int)>(5, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 6 }, { QMetaType::Int, 7 },
+        QtMocHelpers::SlotData<void(int, int)>(3, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 4 }, { QMetaType::Int, 5 },
         }}),
         // Slot 'onMouseMoved'
-        QtMocHelpers::SlotData<void(QPoint &)>(8, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { 0x80000000 | 9, 10 },
+        QtMocHelpers::SlotData<void(QPoint &)>(6, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 7, 8 },
         }}),
         // Slot 'onMouseLeftClicked'
-        QtMocHelpers::SlotData<void()>(11, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(9, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onMouseRightClicked'
-        QtMocHelpers::SlotData<void()>(12, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(10, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'startGame'
+        QtMocHelpers::SlotData<void()>(11, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -96,12 +93,11 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
     if (_c == QMetaObject::InvokeMetaMethod) {
         switch (_id) {
         case 0: _t->gameLoopTick(); break;
-        case 1: _t->on_btnRestart_clicked(); break;
-        case 2: _t->on_btnPause_clicked(); break;
-        case 3: _t->onGridPanned((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[2]))); break;
-        case 4: _t->onMouseMoved((*reinterpret_cast<std::add_pointer_t<QPoint&>>(_a[1]))); break;
-        case 5: _t->onMouseLeftClicked(); break;
-        case 6: _t->onMouseRightClicked(); break;
+        case 1: _t->onGridPanned((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[2]))); break;
+        case 2: _t->onMouseMoved((*reinterpret_cast<std::add_pointer_t<QPoint&>>(_a[1]))); break;
+        case 3: _t->onMouseLeftClicked(); break;
+        case 4: _t->onMouseRightClicked(); break;
+        case 5: _t->startGame(); break;
         default: ;
         }
     }
@@ -126,14 +122,14 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 7)
+        if (_id < 6)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 7;
+        _id -= 6;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 7)
+        if (_id < 6)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 7;
+        _id -= 6;
     }
     return _id;
 }
