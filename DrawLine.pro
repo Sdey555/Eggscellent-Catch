@@ -1,10 +1,10 @@
-QT       += core gui
+TEMPLATE = app
+TARGET = EggscellentCatch
 
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+QT += core gui widgets
 
 CONFIG += c++17
 
-TARGET = EggscellentCatch
 
 INCLUDEPATH += . \
     src \
