@@ -87,45 +87,65 @@ void rasterizeEgg(MyPixels &pixels, const FallingEgg &egg)
         pixels.setPixel(ex, ey - 2, goldDeep);
         pixels.setPixel(ex + 1, ey - 2, border);
     }
-    else if (egg.type == EggType::BOMB)
+    else if (egg.type == EggType::BIRD_POOP)
     {
-        // 6x7 False Egg (Bomb with flickering fuse)
-        const QColor sparkColor = (egg.animTick % 4 < 2) ? QColor(255, 215, 0) : QColor(231, 76, 60);
-        const QColor fuseColor(121, 85, 72);
-        const QColor metalOutline(38, 50, 56);
-        const QColor metalBody(55, 71, 79);
-        const QColor highlight(120, 144, 156);
-        const QColor dangerCross(229, 57, 53);
+        // 7x7 Authentic Pixel Bird Poop with chalky uric acid cap & animated stink particle
+        const QColor outline(62, 39, 35);
+        const QColor poopCore(121, 85, 72);
+        const QColor poopDark(93, 64, 55);
+        const QColor poopHighlight(141, 110, 99);
+        const QColor uricWhite(255, 255, 255);
+        const QColor uricShade(224, 224, 224);
+        const QColor stinkFly = (egg.animTick % 6 < 3) ? QColor(139, 195, 74) : QColor(104, 159, 56);
 
-        // Flickering fuse on top
-        pixels.setPixel(ex, ey + 3, sparkColor);
-        pixels.setPixel(ex + 1, ey + 3, (egg.animTick % 3 == 0 ? sparkColor : fuseColor));
-        pixels.setPixel(ex, ey + 2, fuseColor);
+        // Animated tiny stink vapor speckle wafting upwards
+        const int vaporOx = ((egg.animTick / 3) % 2 == 0 ? -2 : 2);
+        pixels.setPixel(ex + vaporOx, ey + 4, stinkFly);
+        pixels.setPixel(ex + vaporOx + 1, ey + 5, stinkFly.lighter(120));
 
-        // Bomb body outline
-        pixels.setPixel(ex - 1, ey + 1, metalOutline);
-        pixels.setPixel(ex, ey + 1, metalOutline);
-        pixels.setPixel(ex + 1, ey + 1, metalOutline);
+        // Row ey + 3: Swirled top tip
+        pixels.setPixel(ex - 1, ey + 3, outline);
+        pixels.setPixel(ex, ey + 3, uricWhite);
+        pixels.setPixel(ex + 1, ey + 3, outline);
 
-        for (int y = ey; y >= ey - 1; --y)
-        {
-            pixels.setPixel(ex - 2, y, metalOutline);
-            pixels.setPixel(ex + 2, y, metalOutline);
-        }
+        // Row ey + 2: White splatter cap
+        pixels.setPixel(ex - 2, ey + 2, outline);
+        pixels.setPixel(ex - 1, ey + 2, uricWhite);
+        pixels.setPixel(ex, ey + 2, uricWhite);
+        pixels.setPixel(ex + 1, ey + 2, uricShade);
+        pixels.setPixel(ex + 2, ey + 2, outline);
 
-        // Bomb body interior with red danger cross
-        pixels.setPixel(ex - 1, ey, highlight);
-        pixels.setPixel(ex, ey, dangerCross);
-        pixels.setPixel(ex + 1, ey, metalBody);
+        // Row ey + 1: White cap blending into rich brown body
+        pixels.setPixel(ex - 2, ey + 1, outline);
+        pixels.setPixel(ex - 1, ey + 1, uricWhite);
+        pixels.setPixel(ex, ey + 1, uricShade);
+        pixels.setPixel(ex + 1, ey + 1, poopCore);
+        pixels.setPixel(ex + 2, ey + 1, outline);
 
-        pixels.setPixel(ex - 1, ey - 1, dangerCross);
-        pixels.setPixel(ex, ey - 1, dangerCross);
-        pixels.setPixel(ex + 1, ey - 1, dangerCross);
+        // Row ey: Plump middle body with highlight and shade
+        pixels.setPixel(ex - 3, ey, outline);
+        pixels.setPixel(ex - 2, ey, poopHighlight);
+        pixels.setPixel(ex - 1, ey, poopCore);
+        pixels.setPixel(ex, ey, poopCore);
+        pixels.setPixel(ex + 1, ey, poopDark);
+        pixels.setPixel(ex + 2, ey, poopDark);
+        pixels.setPixel(ex + 3, ey, outline);
 
-        // Bottom
-        pixels.setPixel(ex - 1, ey - 2, metalOutline);
-        pixels.setPixel(ex, ey - 2, metalOutline);
-        pixels.setPixel(ex + 1, ey - 2, metalOutline);
+        // Row ey - 1: Wide splat base
+        pixels.setPixel(ex - 3, ey - 1, outline);
+        pixels.setPixel(ex - 2, ey - 1, poopCore);
+        pixels.setPixel(ex - 1, ey - 1, poopCore);
+        pixels.setPixel(ex, ey - 1, poopDark);
+        pixels.setPixel(ex + 1, ey - 1, poopDark);
+        pixels.setPixel(ex + 2, ey - 1, poopDark);
+        pixels.setPixel(ex + 3, ey - 1, outline);
+
+        // Row ey - 2: Bottom splat outline & underside
+        pixels.setPixel(ex - 2, ey - 2, outline);
+        pixels.setPixel(ex - 1, ey - 2, poopDark);
+        pixels.setPixel(ex, ey - 2, poopDark);
+        pixels.setPixel(ex + 1, ey - 2, poopDark);
+        pixels.setPixel(ex + 2, ey - 2, outline);
     }
     else if (egg.type == EggType::BASKET_GROW)
     {

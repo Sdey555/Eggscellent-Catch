@@ -53,6 +53,8 @@ public:
     const Basket& getBasket() const { return basket; }
     const std::vector<Bird>& getBirds() const { return birds; }
     const FallingEgg& getFallingEgg() const { return fallingEgg; }
+    bool isLegendaryBirdActive() const { return legendaryBirdActive; }
+    const Bird& getLegendaryBird() const { return legendaryBird; }
     const std::vector<GameParticle>& getParticles() const { return particles; }
     const std::vector<FloatingText>& getFloatingTexts() const { return floatingTexts; }
 
@@ -89,16 +91,35 @@ private:
 
     std::mt19937 rng;
 
+    // Special Legendary Bird (spawns exclusively to lay the Legendary Egg)
+    bool legendaryBirdActive{false};
+    Bird legendaryBird;
+    int legendaryPathType{0}; // 0 = SINE_WAVE, 1 = SWOOP_ARC, 2 = DIAGONAL_GLIDE, 3 = HORIZONTAL_SURGE
+    double legendaryStartX{0.0};
+    double legendaryStartY{0.0};
+    double legendaryBaseY{0.0};
+    double legendaryAmplitude{0.0};
+    double legendaryFrequency{0.0};
+    double legendarySpeedX{0.0};
+    double legendarySpeedY{0.0};
+    double legendaryDropX{0.0};
+    bool legendaryEggDropped{false};
+    int legendaryAnimTick{0};
+
+    Bird createBird(size_t index, const MyGrid &grid);
     void updatePhysics(const MyGrid &grid);
     void updateBirds(const MyGrid &grid);
+    void updateLegendaryBird(const MyGrid &grid);
+    void spawnLegendaryBird(const MyGrid &grid);
     void updateEggSpawn(const MyGrid &grid);
-    void updateFallingEgg();
+    void updateFallingEgg(const MyGrid &grid);
     void updateParticles();
-    void checkLevelUp();
-    void applyLevelSettings();
+    void checkLevelUp(const MyGrid &grid);
+    void applyLevelSettings(const MyGrid &grid);
 
     void spawnCatchParticles(double x, double y, const QColor &col, int count = 14);
     void spawnSplatParticles(double x, double y, EggType type);
+    void spawnPoopSplashParticles(double x, double y);
     void spawnExplosionParticles(double x, double y);
     void addFloatingText(double x, double y, const QString &text, const QColor &col);
 };

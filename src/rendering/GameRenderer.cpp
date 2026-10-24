@@ -697,6 +697,12 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         rasterizeBird(pixels, bird);
     }
 
+    // Rasterize Special Legendary Phoenix if active
+    if (engine.isLegendaryBirdActive())
+    {
+        rasterizeBird(pixels, engine.getLegendaryBird());
+    }
+
     // Rasterize Basket (Enlarged woven wicker basket)
     rasterizeBasket(pixels, engine.getBasket());
 
@@ -757,17 +763,32 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         restoreGlow.setColorAt(1.0, QColor(156, 39, 176, 0));
         painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, restoreGlow);
     }
-    // Special glowing aura for Bomb
-    else if (egg.active && egg.type == EggType::BOMB)
+    // Special warning aura for Bird Poop
+    else if (egg.active && egg.type == EggType::BIRD_POOP)
     {
         const int ex = grid.mathToScreenX(static_cast<int>(std::round(egg.mathX)));
-        const int ey = grid.mathToScreenY(static_cast<int>(std::round(egg.mathY + 3.0)));
-        const int sparkR = scale * 5;
-        QRadialGradient sparkGlow(ex + scale / 2.0, ey + scale / 2.0, sparkR);
-        sparkGlow.setColorAt(0.0, QColor(255, 120, 0, 85));
-        sparkGlow.setColorAt(0.5, QColor(230, 60, 0, 30));
-        sparkGlow.setColorAt(1.0, QColor(230, 50, 0, 0));
-        painter.fillRect(ex + scale / 2 - sparkR, ey + scale / 2 - sparkR, sparkR * 2, sparkR * 2, sparkGlow);
+        const int ey = grid.mathToScreenY(static_cast<int>(std::round(egg.mathY)));
+        const int stinkR = scale * 6;
+        QRadialGradient stinkGlow(ex + scale / 2.0, ey + scale / 2.0, stinkR);
+        stinkGlow.setColorAt(0.0, QColor(139, 195, 74, 80));  // Sickly green-yellow stink aura
+        stinkGlow.setColorAt(0.5, QColor(109, 76, 65, 35));   // Muddy brown
+        stinkGlow.setColorAt(1.0, QColor(139, 195, 74, 0));
+        painter.fillRect(ex + scale / 2 - stinkR, ey + scale / 2 - stinkR, stinkR * 2, stinkR * 2, stinkGlow);
+    }
+
+    // Special celestial radiant aura for the Mythical Legendary Phoenix
+    if (engine.isLegendaryBirdActive())
+    {
+        const Bird &lb = engine.getLegendaryBird();
+        const int lx = grid.mathToScreenX(static_cast<int>(std::round(lb.mathX)));
+        const int ly = grid.mathToScreenY(static_cast<int>(std::round(lb.mathY)));
+        const int auraR = scale * 10;
+        QRadialGradient phoenixGlow(lx + scale / 2.0, ly + scale / 2.0, auraR);
+        phoenixGlow.setColorAt(0.0, QColor(0, 229, 255, 100));
+        phoenixGlow.setColorAt(0.4, QColor(255, 215, 0, 45));
+        phoenixGlow.setColorAt(0.7, QColor(233, 30, 99, 20));
+        phoenixGlow.setColorAt(1.0, QColor(0, 229, 255, 0));
+        painter.fillRect(lx + scale / 2 - auraR, ly + scale / 2 - auraR, auraR * 2, auraR * 2, phoenixGlow);
     }
 
     // Glowing aura for all active raster pixels
@@ -973,7 +994,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             y += 24;
             painter.drawText(colX, y, "• 3 missed eggs = Game Over (lose hearts).");
             y += 24;
-            painter.drawText(colX, y, "• Avoid bombs! Catching a bomb is fatal.");
+            painter.drawText(colX, y, "• Avoid bird poop! Catching poop loses 1 heart (-1 ❤).");
             y += 24;
             painter.drawText(colX, y, "• Level up every 100 points:");
             y += 24;
@@ -1033,15 +1054,15 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             painter.drawText(colX + 190, y, "Rare bonus");
             y += lineH;
 
-            // Bomb
+            // Bird Poop
             painter.setFont(boldBodyFont);
+            painter.setPen(QColor(188, 108, 37));
+            painter.drawText(colX, y, "[!] Bird Poop");
             painter.setPen(QColor(239, 71, 111));
-            painter.drawText(colX, y, "[X] Bomb");
-            painter.setPen(QColor(239, 71, 111));
-            painter.drawText(colX + 120, y, "FATAL");
+            painter.drawText(colX + 120, y, "-1 Heart");
             painter.setFont(bodyFont);
             painter.setPen(QColor(156, 168, 184));
-            painter.drawText(colX + 190, y, "Instant Game Over!");
+            painter.drawText(colX + 190, y, "Dodge it! Catch loses 1 heart");
             y += lineH;
 
             // Growth Egg

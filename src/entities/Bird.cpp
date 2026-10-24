@@ -2,8 +2,16 @@
 #include "Pixel.h"
 #include <cmath>
 
+void rasterizeLegendaryBird(MyPixels &pixels, const Bird &b);
+
 void rasterizeBird(MyPixels &pixels, const Bird &b)
 {
+    if (b.isLegendary)
+    {
+        rasterizeLegendaryBird(pixels, b);
+        return;
+    }
+
     const int bx = static_cast<int>(std::round(b.mathX));
     const int by = static_cast<int>(std::round(b.mathY));
     const int dir = b.direction;
@@ -136,5 +144,169 @@ void rasterizeBird(MyPixels &pixels, const Bird &b)
         pixels.setPixel(bx, by - 3, alertCol);
         pixels.setPixel(bx - 1, by - 2, alertCol);
         pixels.setPixel(bx + 1, by - 2, alertCol);
+    }
+}
+
+void rasterizeLegendaryBird(MyPixels &pixels, const Bird &b)
+{
+    const int bx = static_cast<int>(std::round(b.mathX));
+    const int by = static_cast<int>(std::round(b.mathY));
+    const int dir = b.direction;
+
+    auto drawOffset = [&](int ox, int oy, const QColor &col) {
+        pixels.setPixel(bx + ox * dir, by + oy, col);
+    };
+
+    // Shifting prismatic celestial colors matching the legendary restoration egg
+    static const QColor spectrum[5] = {
+        QColor(233, 30, 99),   // Rose Magenta
+        QColor(156, 39, 176),  // Royal Violet
+        QColor(0, 229, 255),   // Electric Cyan
+        QColor(0, 230, 118),   // Spring Emerald
+        QColor(255, 215, 0)    // Bright Gold
+    };
+    const int sShift = (b.animTick / 3) % 5;
+
+    const QColor goldCrown(255, 215, 0);
+    const QColor goldDeep(230, 126, 34);
+    const QColor goldBright(255, 235, 59);
+    const QColor diamondGlint = (b.animTick % 4 < 2) ? QColor(255, 255, 255) : QColor(224, 247, 250);
+    const QColor eyeCyan(0, 229, 255);
+    const QColor rubyGem(231, 76, 60);
+
+    // 1. Royal Raptor Beak (Extended and sharp: ox +8 to +11, rows +1 to +2)
+    drawOffset(11, 1, goldBright);
+    drawOffset(10, 1, goldBright);
+    drawOffset(10, 2, goldDeep);
+    drawOffset(9, 1, goldDeep);
+    drawOffset(9, 2, goldBright);
+    drawOffset(8, 1, goldDeep);
+    drawOffset(8, 2, goldBright);
+
+    // 2. Crown Crest with Shimmering Diamond Stars (ox +3 to +8, rows +5 to +7)
+    drawOffset(4, 7, diamondGlint);
+    drawOffset(6, 7, diamondGlint);
+    drawOffset(8, 7, diamondGlint);
+
+    drawOffset(4, 6, spectrum[(sShift + 0) % 5]);
+    drawOffset(5, 6, goldCrown);
+    drawOffset(6, 6, spectrum[(sShift + 1) % 5]);
+    drawOffset(7, 6, goldCrown);
+    drawOffset(8, 6, spectrum[(sShift + 2) % 5]);
+
+    drawOffset(3, 5, rubyGem);
+    drawOffset(4, 5, goldCrown);
+    drawOffset(5, 5, goldCrown);
+    drawOffset(6, 5, goldCrown);
+    drawOffset(7, 5, goldCrown);
+    drawOffset(8, 5, rubyGem);
+
+    // 3. Royal Head & Glowing Luminous Cyan Eye (ox +3 to +8, rows +3 to +4)
+    drawOffset(3, 4, spectrum[(sShift + 3) % 5]);
+    drawOffset(4, 4, goldCrown);
+    drawOffset(5, 4, goldBright);
+    drawOffset(6, 4, goldBright);
+    drawOffset(7, 4, goldCrown);
+
+    drawOffset(3, 3, spectrum[(sShift + 2) % 5]);
+    drawOffset(4, 3, goldCrown);
+    drawOffset(5, 3, QColor(255, 255, 255)); // White eye ring
+    drawOffset(6, 3, eyeCyan);                // Luminous cyan pupil
+    drawOffset(7, 3, goldCrown);
+
+    // 4. Neck & High Throat (ox +2 to +7, row +2)
+    drawOffset(2, 2, spectrum[(sShift + 4) % 5]);
+    drawOffset(3, 2, spectrum[(sShift + 3) % 5]);
+    drawOffset(4, 2, goldCrown);
+    drawOffset(5, 2, goldCrown);
+    drawOffset(6, 2, goldBright);
+    drawOffset(7, 2, goldDeep);
+
+    // 5. Plump Radiant Body & Underbelly (ox -3 to +7, rows -1 to +1)
+    for (int ox = -2; ox <= 6; ++ox)
+    {
+        drawOffset(ox, 1, spectrum[(sShift + (ox + 4)) % 5]);
+    }
+    for (int ox = -3; ox <= 5; ++ox)
+    {
+        drawOffset(ox, 0, goldCrown);
+    }
+    for (int ox = -2; ox <= 4; ++ox)
+    {
+        drawOffset(ox, -1, goldDeep);
+    }
+
+    // 6. Magnificent Broad Prismatic Wings (3 animated frames)
+    if (b.wingFrame == 0)
+    {
+        // Frame 0: High Wing Flap (Majestic arch up to row +8)
+        for (int ox = -1; ox <= 3; ++ox) drawOffset(ox, 3, spectrum[(sShift + 1) % 5]);
+        for (int ox = -2; ox <= 2; ++ox) drawOffset(ox, 4, spectrum[(sShift + 2) % 5]);
+        for (int ox = -3; ox <= 1; ++ox) drawOffset(ox, 5, spectrum[(sShift + 3) % 5]);
+        drawOffset(-2, 6, spectrum[(sShift + 4) % 5]);
+        drawOffset(-1, 6, spectrum[(sShift + 0) % 5]);
+        drawOffset(0, 6, diamondGlint);
+        drawOffset(-2, 7, diamondGlint);
+        drawOffset(-1, 7, spectrum[(sShift + 1) % 5]);
+        drawOffset(0, 7, diamondGlint);
+        drawOffset(-1, 8, diamondGlint);
+    }
+    else if (b.wingFrame == 1)
+    {
+        // Frame 1: Level Glide (Sweeping horizontal wing span)
+        for (int ox = -5; ox <= 2; ++ox) drawOffset(ox, 2, spectrum[(sShift + 1) % 5]);
+        for (int ox = -4; ox <= 1; ++ox) drawOffset(ox, 3, spectrum[(sShift + 2) % 5]);
+        for (int ox = -3; ox <= 0; ++ox) drawOffset(ox, 4, spectrum[(sShift + 3) % 5]);
+        drawOffset(-2, 5, diamondGlint);
+        drawOffset(-1, 5, diamondGlint);
+    }
+    else
+    {
+        // Frame 2: Downward Thrust (Power stroke sweeping down to row -4)
+        for (int ox = -2; ox <= 2; ++ox) drawOffset(ox, 1, spectrum[(sShift + 1) % 5]);
+        for (int ox = -3; ox <= 1; ++ox) drawOffset(ox, 0, spectrum[(sShift + 2) % 5]);
+        for (int ox = -4; ox <= 0; ++ox) drawOffset(ox, -1, spectrum[(sShift + 3) % 5]);
+        for (int ox = -3; ox <= -1; ++ox) drawOffset(ox, -2, spectrum[(sShift + 4) % 5]);
+        drawOffset(-3, -3, spectrum[(sShift + 0) % 5]);
+        drawOffset(-2, -3, diamondGlint);
+        drawOffset(-2, -4, diamondGlint);
+    }
+
+    // 7. Trailing Phoenix Twin Streamer Tails (Undulating ribbons back to ox = -13)
+    const int waveA = static_cast<int>(std::round(std::sin((b.animTick + 0) * 0.4) * 1.5));
+    const int waveB = static_cast<int>(std::round(std::sin((b.animTick + 3) * 0.4) * 1.5));
+
+    // Upper Streamer Ribbon
+    drawOffset(-4, 2, spectrum[(sShift + 0) % 5]);
+    drawOffset(-5, 2, spectrum[(sShift + 1) % 5]);
+    drawOffset(-6, 2 + waveA, spectrum[(sShift + 2) % 5]);
+    drawOffset(-7, 2 + waveA, spectrum[(sShift + 3) % 5]);
+    drawOffset(-8, 3 + waveA, spectrum[(sShift + 4) % 5]);
+    drawOffset(-9, 3 + waveA, spectrum[(sShift + 0) % 5]);
+    drawOffset(-10, 3 + waveA, goldCrown);
+    drawOffset(-11, 3 + waveA, goldCrown);
+    drawOffset(-12, 3 + waveA, diamondGlint);
+    drawOffset(-13, 4 + waveA, diamondGlint);
+
+    // Lower Streamer Ribbon
+    drawOffset(-4, 0, spectrum[(sShift + 2) % 5]);
+    drawOffset(-5, 0, spectrum[(sShift + 3) % 5]);
+    drawOffset(-6, 0 + waveB, spectrum[(sShift + 4) % 5]);
+    drawOffset(-7, -1 + waveB, spectrum[(sShift + 0) % 5]);
+    drawOffset(-8, -1 + waveB, spectrum[(sShift + 1) % 5]);
+    drawOffset(-9, -1 + waveB, goldCrown);
+    drawOffset(-10, -2 + waveB, goldCrown);
+    drawOffset(-11, -2 + waveB, rubyGem);
+    drawOffset(-12, -2 + waveB, diamondGlint);
+
+    // 8. Warning indicator when preparing to lay the legendary egg
+    if (b.isLaying)
+    {
+        pixels.setPixel(bx, by - 3, diamondGlint);
+        pixels.setPixel(bx, by - 4, spectrum[sShift]);
+        pixels.setPixel(bx - 1, by - 3, spectrum[(sShift + 1) % 5]);
+        pixels.setPixel(bx + 1, by - 3, spectrum[(sShift + 2) % 5]);
+        pixels.setPixel(bx - 2, by - 4, goldCrown);
+        pixels.setPixel(bx + 2, by - 4, goldCrown);
     }
 }

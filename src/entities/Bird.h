@@ -19,8 +19,11 @@ struct Bird {
     bool isLaying = false;
     int layingCountdown = 0;
     EggType pendingEggType = EggType::REGULAR;
+    bool isLegendary = false;
+    int animTick = 0;
 };
 
 void rasterizeBird(MyPixels &pixels, const Bird &b);
+void rasterizeLegendaryBird(MyPixels &pixels, const Bird &b);
 
 #endif // BIRD_H
