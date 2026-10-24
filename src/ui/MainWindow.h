@@ -36,9 +36,10 @@ private slots:
     void gameLoopTick();
     void onGridPanned(int dx, int dy);
 
-    // Mouse controls
+    // Mouse & Touch controls
     void onMouseMoved(QPoint &pos);
     void onMouseLeftClicked();
+    void onMouseLeftReleased();
     void onMouseRightClicked();
     void startGame();
 
@@ -61,9 +62,13 @@ private:
 
     void resetGame();
     void togglePause();
+    void returnToMainMenu();
+    void openSettings();
     void updateHUD();
     void redrawPixels();
     void nextMenuSlide();
+
+    GameState previousStateBeforeSettings{GameState::PAUSED};
 };
 
 #endif // MAINWINDOW_H

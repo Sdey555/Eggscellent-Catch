@@ -29,6 +29,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->frame, &CanvasLabel::panDelta, this, &MainWindow::onGridPanned);
     connect(ui->frame, &CanvasLabel::sendMousePosition, this, &MainWindow::onMouseMoved);
     connect(ui->frame, &CanvasLabel::Mouse_Pos, this, &MainWindow::onMouseLeftClicked);
+    connect(ui->frame, &CanvasLabel::leftReleased, this, &MainWindow::onMouseLeftReleased);
     connect(ui->frame, &CanvasLabel::rightClicked, this, &MainWindow::onMouseRightClicked);
 
     gameTimer = new QTimer(this);
@@ -65,6 +66,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::lockCursorToFrame()
 {
+#ifndef Q_OS_ANDROID
+    if (engine.getControlMode() != ControlMode::MOUSE_KEYBOARD)
+    {
+        return;
+    }
 #ifdef Q_OS_WIN
     if (ui && ui->frame && isVisible())
     {
@@ -105,6 +111,7 @@ void MainWindow::lockCursorToFrame()
         ui->frame->setCursor(Qt::BlankCursor);
     }
     this->setCursor(Qt::BlankCursor);
+#endif
 }
 
 void MainWindow::unlockCursor()
@@ -153,6 +160,28 @@ void MainWindow::resetGame()
     redrawPixels();
 }
 
+void MainWindow::returnToMainMenu()
+{
+    engine.setState(GameState::MENU);
+    engine.reset(myGrid);
+    unlockCursor();
+    audioManager.playSound(SoundId::UI_CLICK);
+    audioManager.stopBGM();
+    audioManager.playBGM();
+    updateHUD();
+    redrawPixels();
+}
+
+void MainWindow::openSettings()
+{
+    previousStateBeforeSettings = engine.getState();
+    engine.setState(GameState::SETTINGS);
+    unlockCursor();
+    audioManager.playSound(SoundId::UI_CLICK);
+    updateHUD();
+    redrawPixels();
+}
+
 void MainWindow::togglePause()
 {
     if (engine.getState() == GameState::MENU)
@@ -162,6 +191,19 @@ void MainWindow::togglePause()
     if (engine.getState() == GameState::GAME_OVER)
     {
         resetGame();
+        return;
+    }
+    if (engine.getState() == GameState::SETTINGS)
+    {
+        engine.setState(previousStateBeforeSettings);
+        if (previousStateBeforeSettings == GameState::PLAYING)
+        {
+            audioManager.resumeBGM();
+            lockCursorToFrame();
+        }
+        audioManager.playSound(SoundId::UI_CLICK);
+        updateHUD();
+        redrawPixels();
         return;
     }
     engine.togglePause();
@@ -304,9 +346,40 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             return;
         }
     }
+    else if (engine.getState() == GameState::SETTINGS)
+    {
+        if (key == Qt::Key_Escape || key == Qt::Key_Backspace)
+        {
+            togglePause();
+            return;
+        }
+    }
+    else if (engine.getState() == GameState::PAUSED)
+    {
+        if (key == Qt::Key_Escape || key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter)
+        {
+            togglePause();
+            return;
+        }
+        else if (key == Qt::Key_S)
+        {
+            openSettings();
+            return;
+        }
+        else if (key == Qt::Key_R)
+        {
+            resetGame();
+            return;
+        }
+        else if (key == Qt::Key_M)
+        {
+            returnToMainMenu();
+            return;
+        }
+    }
 
-    // Toggle Pause with ESC key (or Space while paused)
-    if (key == Qt::Key_Escape || (key == Qt::Key_Space && engine.getState() == GameState::PAUSED))
+    // Toggle Pause with ESC key
+    if (key == Qt::Key_Escape)
     {
         togglePause();
         return;
@@ -414,23 +487,34 @@ void MainWindow::gameLoopTick()
             unlockCursor();
         }
     }
-    else if (engine.getState() == GameState::PAUSED || engine.getState() == GameState::MENU)
+    else if (engine.getState() == GameState::PAUSED || engine.getState() == GameState::MENU || engine.getState() == GameState::SETTINGS)
     {
         unlockCursor();
     }
     else if (engine.getState() == GameState::PLAYING)
     {
-        // Keep cursor hidden while playing
-        if (ui && ui->frame && ui->frame->cursor().shape() != Qt::BlankCursor)
+        if (engine.getControlMode() == ControlMode::MOUSE_KEYBOARD)
         {
-            ui->frame->setCursor(Qt::BlankCursor);
-        }
+            // Keep cursor hidden while playing in Mouse mode
+            if (ui && ui->frame && ui->frame->cursor().shape() != Qt::BlankCursor)
+            {
+                ui->frame->setCursor(Qt::BlankCursor);
+            }
 
-        if (engine.isMouseControl() && ui && ui->frame)
+            if (engine.isMouseControl() && ui && ui->frame)
+            {
+                const QPoint localPos = ui->frame->mapFromGlobal(QCursor::pos());
+                const int clampedX = std::clamp(localPos.x(), 0, std::max(1, ui->frame->width() - 1));
+                engine.handleMouseMove(clampedX);
+            }
+        }
+        else
         {
-            const QPoint localPos = ui->frame->mapFromGlobal(QCursor::pos());
-            const int clampedX = std::clamp(localPos.x(), 0, std::max(1, ui->frame->width() - 1));
-            engine.handleMouseMove(clampedX);
+            // For Touch, Virtual Buttons, or Gyro, keep cursor normal/visible
+            if (ui && ui->frame && ui->frame->cursor().shape() == Qt::BlankCursor)
+            {
+                ui->frame->setCursor(Qt::ArrowCursor);
+            }
         }
     }
 
@@ -452,7 +536,7 @@ void MainWindow::redrawPixels()
         return;
     }
 
-    QPixmap pix = renderer.renderFrame(engine, myGrid, myPixels, width, height, scale, hudTick);
+    QPixmap pix = renderer.renderFrame(engine, myGrid, myPixels, width, height, scale, hudTick, &audioManager);
     ui->frame->setPixmap(pix);
 }
 
@@ -466,16 +550,37 @@ void MainWindow::onMouseMoved(QPoint &pos)
 {
     if (engine.getState() == GameState::PLAYING)
     {
+        if (engine.getControlMode() == ControlMode::VIRTUAL_BUTTONS)
+        {
+            if (ui && ui->frame && ui->frame->isLeftMouseDown())
+            {
+                const int width = ui->frame->width();
+                const int height = ui->frame->height();
+                const QRect leftRect = GameRenderer::getVirtualLeftButtonRect(width, height);
+                const QRect rightRect = GameRenderer::getVirtualRightButtonRect(width, height);
+                engine.setKeyLeft(leftRect.contains(pos));
+                engine.setKeyRight(rightRect.contains(pos));
+            }
+            return;
+        }
+        else if (engine.getControlMode() == ControlMode::GYROSCOPE)
+        {
+            return;
+        }
+
         engine.handleMouseMove(pos.x());
     }
 }
 
 void MainWindow::onMouseLeftClicked()
 {
+    const int width = ui->frame->width();
+    const int height = ui->frame->height();
+    const QPoint clickPos = ui->frame->lastClickPosition();
+
+    // 1. MENU STATE
     if (engine.getState() == GameState::MENU)
     {
-        const int width = ui->frame->width();
-        const int height = ui->frame->height();
         const int cardW = std::min(width - 40, 520);
         const int cardH = std::min(height - 40, 390);
         const int cardX = (width - cardW) / 2;
@@ -485,7 +590,14 @@ void MainWindow::onMouseLeftClicked()
         const int modeBarY = cardY + 75;
         const int startModeX = cardX + (cardW - (modeBtnW * 3 + 20)) / 2;
 
-        const QPoint clickPos = ui->frame->lastClickPosition();
+        // Check Settings Button on Menu Card
+        const QRect menuSettingsBtn(cardX + cardW - 105, cardY + 16, 85, 26);
+        if (menuSettingsBtn.contains(clickPos))
+        {
+            openSettings();
+            return;
+        }
+
         if (clickPos.y() >= modeBarY && clickPos.y() <= modeBarY + modeBtnH)
         {
             if (clickPos.x() >= startModeX && clickPos.x() <= startModeX + modeBtnW)
@@ -514,19 +626,318 @@ void MainWindow::onMouseLeftClicked()
         startGame();
         return;
     }
+
+    // 2. GAME OVER STATE
     if (engine.getState() == GameState::GAME_OVER)
     {
         resetGame();
         return;
     }
+
+    // 3. PAUSED STATE
     if (engine.getState() == GameState::PAUSED)
     {
+        const int cardW = std::min(width - 40, 420);
+        const int cardH = std::min(height - 40, 360);
+        const int cardX = (width - cardW) / 2;
+        const int cardY = (height - cardH) / 2;
+
+        // Difficulty Mode pills
+        const int modeBtnW = std::min(104, (cardW - 60) / 3);
+        const int modeBtnH = 27;
+        const int modeGap = 8;
+        const int totalModeW = modeBtnW * 3 + modeGap * 2;
+        const int startModeX = cardX + (cardW - totalModeW) / 2;
+        const int modeBarY = cardY + 74;
+
+        const QRect easyRect(startModeX, modeBarY, modeBtnW, modeBtnH);
+        const QRect medRect(startModeX + modeBtnW + modeGap, modeBarY, modeBtnW, modeBtnH);
+        const QRect hardRect(startModeX + (modeBtnW + modeGap) * 2, modeBarY, modeBtnW, modeBtnH);
+
+        if (easyRect.contains(clickPos))
+        {
+            engine.setMode(GameMode::EASY, myGrid);
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        else if (medRect.contains(clickPos))
+        {
+            engine.setMode(GameMode::MEDIUM, myGrid);
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        else if (hardRect.contains(clickPos))
+        {
+            engine.setMode(GameMode::HARD, myGrid);
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+
+        const int btnW = cardW - 70;
+        const int btnH = 36;
+        const int btnGap = 9;
+        const int btnX = cardX + (cardW - btnW) / 2;
+        const int startY = cardY + 130;
+
+        const QRect btnResume(btnX, startY, btnW, btnH);
+        const QRect btnSettings(btnX, startY + (btnH + btnGap), btnW, btnH);
+        const QRect btnRestart(btnX, startY + (btnH + btnGap) * 2, btnW, btnH);
+        const QRect btnMainMenu(btnX, startY + (btnH + btnGap) * 3, btnW, btnH);
+
+        if (btnResume.contains(clickPos))
+        {
+            togglePause();
+            return;
+        }
+        else if (btnSettings.contains(clickPos))
+        {
+            openSettings();
+            return;
+        }
+        else if (btnRestart.contains(clickPos))
+        {
+            resetGame();
+            return;
+        }
+        else if (btnMainMenu.contains(clickPos))
+        {
+            returnToMainMenu();
+            return;
+        }
+
+        // Clicking anywhere inside the card frame should not resume accidentally
+        const QRect cardRect(cardX, cardY, cardW, cardH);
+        if (cardRect.contains(clickPos))
+        {
+            return;
+        }
+
+        // Clicking outside card resumes
         togglePause();
         return;
     }
 
-    engine.handleMouseLeftClick(ui->frame->lastClickPosition().x());
+    // 4. SETTINGS STATE
+    if (engine.getState() == GameState::SETTINGS)
+    {
+        const int cardW = std::min(width - 40, 560);
+        const int cardH = std::min(height - 40, 480);
+        const int cardX = (width - cardW) / 2;
+        const int cardY = (height - cardH) / 2;
+        const int rowLeftX = cardX + 35;
+
+        const int volStartX = rowLeftX + 205;
+        const int volBtnW = 50;
+        const int volBtnH = 26;
+        const int volGap = 7;
+        const float volValues[5] = {0.0f, 0.25f, 0.50f, 0.75f, 1.0f};
+
+        // --- ROW 1: Music (BGM) ---
+        const int y1 = cardY + 76;
+        const QRect bgmMuteBtn(rowLeftX + 130, y1, 65, 26);
+        if (bgmMuteBtn.contains(clickPos))
+        {
+            audioManager.setBGMMuted(!audioManager.isBGMMuted());
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        for (int i = 0; i < 5; ++i)
+        {
+            const QRect vb(volStartX + i * (volBtnW + volGap), y1, volBtnW, volBtnH);
+            if (vb.contains(clickPos))
+            {
+                if (audioManager.isBGMMuted())
+                {
+                    audioManager.setBGMMuted(false);
+                }
+                audioManager.setBGMVolume(volValues[i]);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+        }
+
+        // --- ROW 2: Sound Effects (SFX) ---
+        const int y2 = cardY + 124;
+        const QRect sfxMuteBtn(rowLeftX + 130, y2, 65, 26);
+        if (sfxMuteBtn.contains(clickPos))
+        {
+            audioManager.setSFXMuted(!audioManager.isSFXMuted());
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        for (int i = 0; i < 5; ++i)
+        {
+            const QRect vb(volStartX + i * (volBtnW + volGap), y2, volBtnW, volBtnH);
+            if (vb.contains(clickPos))
+            {
+                if (audioManager.isSFXMuted())
+                {
+                    audioManager.setSFXMuted(false);
+                }
+                audioManager.setSFXVolume(volValues[i]);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+        }
+
+        // --- ROW 3: Controls Mode ---
+        const int y3 = cardY + 172;
+        const int ctlStartX = rowLeftX + 115;
+        const int ctlBtnW = 86;
+        const int ctlBtnH = 26;
+        const int ctlGap = 6;
+        const ControlMode modes[4] = {
+            ControlMode::SCREEN_TOUCH,
+            ControlMode::VIRTUAL_BUTTONS,
+            ControlMode::GYROSCOPE,
+            ControlMode::MOUSE_KEYBOARD
+        };
+        for (int i = 0; i < 4; ++i)
+        {
+            const QRect cb(ctlStartX + i * (ctlBtnW + ctlGap), y3, ctlBtnW, ctlBtnH);
+            if (cb.contains(clickPos))
+            {
+                engine.setControlMode(modes[i]);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+        }
+
+        // --- ROW 4: Thunder Flash ---
+        const int y4 = cardY + 220;
+        const QRect btnFlashOn(rowLeftX + 130, y4, 110, 26);
+        const QRect btnFlashOff(rowLeftX + 250, y4, 160, 26);
+        if (btnFlashOn.contains(clickPos))
+        {
+            engine.setLightningFlashEnabled(true);
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        else if (btnFlashOff.contains(clickPos))
+        {
+            engine.setLightningFlashEnabled(false);
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+
+        // --- ROW 5: Pixel Scale ---
+        const int y5 = cardY + 268;
+        const int scales[4] = {3, 4, 5, 6};
+        for (int i = 0; i < 4; ++i)
+        {
+            const QRect sb(rowLeftX + 130 + i * 65, y5, 55, 26);
+            if (sb.contains(clickPos))
+            {
+                scale = scales[i];
+                myGrid.setScale(scale);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+        }
+
+        // --- Back / Done Button ---
+        const int backW = 190;
+        const int backH = 36;
+        const int backX = cardX + (cardW - backW) / 2;
+        const int backY = cardY + cardH - 50;
+        const QRect btnBack(backX, backY, backW, backH);
+        if (btnBack.contains(clickPos))
+        {
+            engine.setState(previousStateBeforeSettings);
+            if (previousStateBeforeSettings == GameState::PLAYING)
+            {
+                audioManager.resumeBGM();
+                lockCursorToFrame();
+            }
+            audioManager.playSound(SoundId::UI_CLICK);
+            updateHUD();
+            redrawPixels();
+            return;
+        }
+
+        return;
+    }
+
+    // 5. PLAYING STATE
+    // 5.1 Pause Button
+    const QRect pauseRect = GameRenderer::getPauseButtonRect(width, height);
+    if (pauseRect.contains(clickPos))
+    {
+        audioManager.playSound(SoundId::UI_CLICK);
+        togglePause();
+        return;
+    }
+
+    // 5.2 Growth Egg Button [ 🧺 H ]
+    if (engine.getGrowthEggCount() > 0)
+    {
+        const QRect hRect = GameRenderer::getGrowthButtonRect(width, height);
+        if (hRect.contains(clickPos))
+        {
+            engine.useGrowthEgg();
+            redrawPixels();
+            return;
+        }
+    }
+
+    // 5.3 Companion Basket Button [ 🤖 C ]
+    if (engine.getMode() == GameMode::HARD && engine.getGrowthEggCount() >= 2)
+    {
+        const QRect cRect = GameRenderer::getCompanionButtonRect(width, height);
+        if (cRect.contains(clickPos))
+        {
+            engine.summonCompanionBasket();
+            redrawPixels();
+            return;
+        }
+    }
+
+    // 5.4 Mode-specific actions
+    if (engine.getControlMode() == ControlMode::VIRTUAL_BUTTONS)
+    {
+        const QRect leftRect = GameRenderer::getVirtualLeftButtonRect(width, height);
+        const QRect rightRect = GameRenderer::getVirtualRightButtonRect(width, height);
+        if (leftRect.contains(clickPos))
+        {
+            engine.setKeyLeft(true);
+            engine.setKeyRight(false);
+            return;
+        }
+        else if (rightRect.contains(clickPos))
+        {
+            engine.setKeyRight(true);
+            engine.setKeyLeft(false);
+            return;
+        }
+        return;
+    }
+    else if (engine.getControlMode() == ControlMode::GYROSCOPE)
+    {
+        return;
+    }
+
+    engine.handleMouseLeftClick(clickPos.x());
     updateHUD();
+}
+
+void MainWindow::onMouseLeftReleased()
+{
+    if (engine.getControlMode() == ControlMode::VIRTUAL_BUTTONS)
+    {
+        engine.setKeyLeft(false);
+        engine.setKeyRight(false);
+    }
 }
 
 void MainWindow::onMouseRightClicked()

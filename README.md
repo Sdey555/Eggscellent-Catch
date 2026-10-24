@@ -1,98 +1,115 @@
 ﻿# Eggscellent Catch
 
-A retro arcade egg-catcher built with Qt and C++. The game uses a custom raster graphics pipeline, glowing pixel art, layered backgrounds, and a progressively harder 50-level challenge system.
+Eggscellent Catch is a Qt/C++ arcade game built around a custom pixel-raster graphics pipeline. Catch eggs in a woven basket, avoid bird droppings, and progress through increasingly difficult levels.
 
 ## Features
 
-- Woven basket movement using keyboard or mouse input
-- Regular eggs, golden bonus eggs, rare growth eggs, legendary restoration eggs, and dangerous bombs
-- 3-heart life system with instant game-over on bomb contact
-- 50-level progression with increasing spawn pressure and basket narrowing
-- Atmospheric retro scene with clouds, farmhouse detail, haze, and glowing foreground elements
-- Pause, restart, and HUD-driven gameplay loop
+- Three difficulty modes: Easy, Medium, and Hard
+- Up to 50 levels; each level requires 100 points and increases the challenge
+- Moving birds, falling eggs, animated pixel art, particle effects, and a score/high-score HUD
+- Day/night cycle, occasional thunderstorms, lightning, and sticky ground puddles
+- Background music and sound effects, with audio settings
+- Mouse, keyboard, touch, virtual-button, and gyroscope control modes
+- Special growth eggs and a temporary companion basket in Hard mode
+
+## Gameplay
+
+You start with three hearts. Catch regular and golden eggs to score points, and avoid catching bird droppings, which cost a heart. Missing a dropping is safe; missing a regular or golden egg costs a heart.
+
+| Item | Effect |
+| --- | --- |
+| Regular egg | +10 points; missing it costs one heart |
+| Golden egg | +50 points; missing it costs one heart |
+| Growth egg | +25 points and adds one growth egg to your inventory; safe to miss |
+| Restoration egg | +100 points and restores the basket to its starting width; safe to miss |
+| Bird dropping | Catching it costs one heart; safe to miss |
+
+Growth eggs appear when the basket has become small. Press `H` to use one and widen the basket. In Hard mode, press `C` to spend two growth eggs and summon a temporary companion basket. Restoration eggs may appear after the basket has narrowed.
 
 ## Controls
 
-- Move left/right: `A` / `D` or `◀` / `▶`
-- Move with mouse: horizontal pointer tracking
-- Pause/resume: `Space` or right-click
-- Restart: `R` or the in-game Restart button
+### Desktop
 
-## Gameplay Overview
+- Move: `A` / `D` or `Left Arrow` / `Right Arrow`
+- Mouse movement: move the basket horizontally
+- Pause or resume: `Esc`; `Space` or right-click also resumes from the pause screen
+- Restart: `R`
+- Use a growth egg: `H`
+- Summon a companion basket (Hard mode, costs two growth eggs): `C`
+- Mute/unmute audio: `M`
 
-- Regular eggs: +10 points, missing one costs 1 heart
-- Golden eggs: +50 points, missing one costs 1 heart
-- Growth eggs: +25 points; they expand the basket when needed and are safe to miss
-- Restoration eggs: +100 points; they restore the basket to full width and are safe to miss
-- Bombs: instantly end the run if caught
-- Progression: levels scale up to 50, with more frequent drops and a shrinking basket over time
+On the start screen, select Easy/Medium/Hard with `1` / `2` / `3`, cycle modes with `Tab`, and start with `Space` or `Enter`.
+
+The settings screen also provides touch, virtual-button, and gyroscope control modes for supported devices.
 
 ## Requirements
 
-- Qt 6 (or Qt 5) with the `Widgets` module
+- Qt 6 (or Qt 5) with the **Widgets** and **Multimedia** modules
 - C++17 compiler
 - qmake
-- On Windows, a MinGW-w64 toolchain is recommended for building the portable package
+- For the Windows portable package: 64-bit MinGW-w64 `g++` and Windows PowerShell
 
 ## Build and Run
 
-### 1. Clone the project
+### Get the source
 
 ```bash
 git clone https://github.com/Sdey555/Eggscellent-Catch.git
 cd Eggscellent-Catch
 ```
 
-### 2. Build from source
+### Build with Qt Creator
 
-```bash
-qmake DrawLine.pro
+Open `DrawLine.pro` in Qt Creator, select a desktop kit matching the installed Qt version and compiler, choose a **Release** build, and build the project. The executable is produced in the selected build directory.
+
+### Build from a MinGW command prompt
+
+Run these commands from the project root in a Qt command prompt configured for the matching MinGW kit:
+
+```powershell
+qmake DrawLine.pro "CONFIG+=release" "CONFIG-=debug"
 mingw32-make
 ```
 
-The built executable is output to `release/EggscellentCatch.exe`.
+Run the resulting `EggscellentCatch.exe`. Its location depends on the build directory; if you want to create the portable package, make sure the Release executable and its deployed Qt runtime files are in `release\`.
 
-### 3. Run the game
+### Create the portable Windows executable
 
-- Windows desktop build: run `release/EggscellentCatch.exe`
-- Portable executable: run `EggscellentCatch-Portable.exe` from the project root after packaging
+With `release\EggscellentCatch.exe` built, deploy the matching Qt runtime into `release\` if it is not already there:
 
-### 4. Create the portable Windows package
+```powershell
+windeployqt release\EggscellentCatch.exe
+```
 
-After a Release build is available, run:
+Then create the single-file portable package:
 
 ```powershell
 .\packaging\package-portable.ps1
 ```
 
-This script packages the Qt runtime and app into a single portable `.exe` file. It requires a MinGW-w64 `g++` compiler on `PATH`.
+The script writes `EggscellentCatch-Portable.exe` to the project root. It packages the app and runtime files from `release\`; the portable app extracts them to a temporary directory when launched.
 
 ## Project Structure
 
 ```text
 src/
-├── core/
-│   ├── Pixel.h / .cpp
-│   └── Grid.h / .cpp
-├── entities/
-│   ├── GameTypes.h
-│   ├── Particle.h
-│   ├── Basket.h / .cpp
-│   ├── Bird.h / .cpp
-│   └── FallingEgg.h / .cpp
-├── game/
-│   └── GameEngine.h / .cpp
-├── rendering/
-│   ├── PixelFont.h / .cpp
-│   └── GameRenderer.h / .cpp
-├── ui/
-│   ├── CanvasLabel.h / .cpp
-│   ├── MainWindow.h / .cpp
-│   └── mainwindow.ui
-├── main.cpp
-└── ...
+├── core/       # Pixel/grid primitives and motion-sensor support
+├── entities/   # Basket, birds, falling eggs, and shared game types
+├── game/       # Game state, rules, physics, difficulty, and weather
+├── rendering/  # Pixel font and scene/game rendering
+├── audio/      # Music and sound-effect playback
+├── ui/         # Qt window, interactive canvas, and UI form
+└── main.cpp    # Application entry point
+
+audio/          # Music and sound-effect assets
+audio.qrc       # Qt audio resource collection
+packaging/      # Windows portable-app launcher and packaging script
+DrawLine.pro    # qmake project
 ```
 
-## Notes
+## Contributors
 
-This project combines a hand-authored raster rendering pipeline with a lightweight Qt UI, giving the game a classic arcade look while keeping the code organized by system: core math, entities, game logic, rendering, and UI.
+- Shuvadip Dey
+- Sanvi Bhowmik
+- Akshay Gupta
+- Toufik Mia

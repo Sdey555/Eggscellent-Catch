@@ -39,7 +39,15 @@ enum class GameState {
     MENU,
     PLAYING,
     PAUSED,
+    SETTINGS,
     GAME_OVER
+};
+
+enum class ControlMode {
+    SCREEN_TOUCH,        // Touch or drag anywhere on screen (speed-limited)
+    VIRTUAL_BUTTONS,     // On-screen Left/Right touch buttons for thumbs
+    GYROSCOPE,           // Tilt phone left/right to move basket
+    MOUSE_KEYBOARD       // Mouse cursor tracking + keyboard A/D or arrows
 };
 
 enum class SoundId {

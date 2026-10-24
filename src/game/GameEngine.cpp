@@ -62,6 +62,9 @@ void GameEngine::init(const MyGrid &grid)
     basket.halfWidth = 9;
     basket.height = 7;
     basket.speed = std::clamp(screenSpan / 70.0, 1.8, 5.5);
+    mouseScreenX = width / 2;
+    lastMouseX = width / 2;
+    touchActive = false;
 
     birds.clear();
     applyLevelSettings(grid);
@@ -75,6 +78,10 @@ void GameEngine::reset(const MyGrid &grid)
 {
     init(grid);
     gameState = GameState::PLAYING;
+    if (controlMode == ControlMode::GYROSCOPE)
+    {
+        MotionSensor::instance().start();
+    }
 }
 
 void GameEngine::setMode(GameMode m)
@@ -262,23 +269,53 @@ void GameEngine::setKeyRight(bool pressed)
     }
 }
 
+void GameEngine::setControlMode(ControlMode m)
+{
+    controlMode = m;
+    if (controlMode == ControlMode::GYROSCOPE)
+    {
+        MotionSensor::instance().start();
+    }
+    else
+    {
+        MotionSensor::instance().stop();
+    }
+    if (controlMode == ControlMode::MOUSE_KEYBOARD)
+    {
+        mouseControlAllowed = true;
+    }
+}
+
 void GameEngine::handleMouseMove(int screenX)
 {
+    if (controlMode == ControlMode::VIRTUAL_BUTTONS || controlMode == ControlMode::GYROSCOPE)
+    {
+        return;
+    }
+    if (controlMode == ControlMode::MOUSE_KEYBOARD && !mouseControlAllowed)
+    {
+        return;
+    }
     mouseScreenX = screenX;
     lastMouseX = screenX;
     mouseControl = true;
+    touchActive = true;
 }
 
 void GameEngine::handleMouseLeftClick(int clickX)
 {
+    if (controlMode == ControlMode::VIRTUAL_BUTTONS || controlMode == ControlMode::GYROSCOPE)
+    {
+        return;
+    }
+    if (controlMode == ControlMode::MOUSE_KEYBOARD && !mouseControlAllowed)
+    {
+        return;
+    }
     mouseScreenX = clickX;
     lastMouseX = clickX;
     mouseControl = true;
-
-    if (gameState == GameState::PAUSED)
-    {
-        togglePause();
-    }
+    touchActive = true;
 }
 
 void GameEngine::handleMouseRightClick()
@@ -703,35 +740,79 @@ void GameEngine::updatePhysics(const MyGrid &grid)
     updateEggSpawn(grid);
     updateFallingEggs(grid);
 
-    // Move Player Basket via Keyboard or Mouse
+    // Move Player Basket via Selected Control Scheme (Speed-limited)
     const double minBasketX = static_cast<double>(minMathX);
     const double maxBasketX = static_cast<double>(maxMathX);
+    const double moveSpeed = basket.speed;
 
-    if (mouseControl)
+    if (controlMode == ControlMode::GYROSCOPE)
     {
-        const double norm = std::clamp(static_cast<double>(mouseScreenX) / std::max(1, frameW - 1), 0.0, 1.0);
-        const double targetX = minBasketX + norm * (maxBasketX - minBasketX);
-        if (inStickyZone || lightningShockTimer > 0)
-        {
-            // Speed penalty active: smooth chase with penalty speed
-            const double maxStep = basket.speed * 1.5;
-            basket.mathX += std::clamp(targetX - basket.mathX, -maxStep, maxStep);
-        }
-        else
-        {
-            // Crisp, direct, responsive 1:1 mouse tracking
-            basket.mathX = targetX;
-        }
-    }
-    else
-    {
+        gyroTilt = MotionSensor::instance().getTiltX();
+        // Responsive tilt glide up to full speed
+        basket.mathX += gyroTilt * moveSpeed * 1.35;
+
+        // Support auxiliary keyboard arrows or on-screen button taps if pressed
         if (keyLeftPressed)
         {
-            basket.mathX -= basket.speed;
+            basket.mathX -= moveSpeed;
         }
         if (keyRightPressed)
         {
-            basket.mathX += basket.speed;
+            basket.mathX += moveSpeed;
+        }
+    }
+    else if (controlMode == ControlMode::VIRTUAL_BUTTONS)
+    {
+        if (keyLeftPressed)
+        {
+            basket.mathX -= moveSpeed;
+        }
+        if (keyRightPressed)
+        {
+            basket.mathX += moveSpeed;
+        }
+    }
+    else if (controlMode == ControlMode::SCREEN_TOUCH)
+    {
+        if (touchActive)
+        {
+            const double norm = std::clamp(static_cast<double>(mouseScreenX) / std::max(1, frameW - 1), 0.0, 1.0);
+            const double targetX = minBasketX + norm * (maxBasketX - minBasketX);
+            const double deltaX = targetX - basket.mathX;
+            if (std::abs(deltaX) < 0.6)
+            {
+                basket.mathX = targetX;
+                touchActive = false;
+            }
+            else
+            {
+                // Strict speed limit: basket moves towards finger up to maxStep per tick
+                const double maxStep = moveSpeed * 1.85;
+                basket.mathX += std::clamp(deltaX, -maxStep, maxStep);
+            }
+        }
+    }
+    else // ControlMode::MOUSE_KEYBOARD
+    {
+        if (mouseControl && mouseControlAllowed)
+        {
+            const double norm = std::clamp(static_cast<double>(mouseScreenX) / std::max(1, frameW - 1), 0.0, 1.0);
+            const double targetX = minBasketX + norm * (maxBasketX - minBasketX);
+            const double deltaX = targetX - basket.mathX;
+            // Limited speed as it was previously: smooth chase up to maxStep per tick
+            const double maxStep = moveSpeed * 2.0;
+            basket.mathX += std::clamp(deltaX, -maxStep, maxStep);
+        }
+        else
+        {
+            if (keyLeftPressed)
+            {
+                basket.mathX -= moveSpeed;
+            }
+            if (keyRightPressed)
+            {
+                basket.mathX += moveSpeed;
+            }
         }
     }
 

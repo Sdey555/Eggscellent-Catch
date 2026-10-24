@@ -5,14 +5,15 @@ QT += core gui widgets multimedia
 
 CONFIG += c++17
 
-INCLUDEPATH += . \
-    src \
-    src/core \
-    src/entities \
-    src/game \
-    src/rendering \
-    src/audio \
-    src/ui
+INCLUDEPATH += \
+    "$$PWD" \
+    "$$PWD/src" \
+    "$$PWD/src/core" \
+    "$$PWD/src/entities" \
+    "$$PWD/src/game" \
+    "$$PWD/src/rendering" \
+    "$$PWD/src/audio" \
+    "$$PWD/src/ui"
 
 SOURCES += \
     src/main.cpp \
@@ -31,6 +32,7 @@ SOURCES += \
 HEADERS += \
     src/core/Pixel.h \
     src/core/Grid.h \
+    src/core/MotionSensor.h \
     src/entities/GameTypes.h \
     src/entities/Particle.h \
     src/entities/Basket.h \
@@ -50,6 +52,11 @@ FORMS += \
     src/ui/mainwindow.ui
 
 # Default rules for deployment.
+android {
+    ANDROID_ABIS = arm64-v8a
+    QT_ANDROID_ABIS = arm64-v8a
+    LIBS += -landroid
+}
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target

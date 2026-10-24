@@ -72,6 +72,7 @@ void CanvasLabel::mouseReleaseEvent(QMouseEvent *ev)
     if (ev->button() == Qt::LeftButton)
     {
         isLeftPressed = false;
+        emit leftReleased();
     }
     else if (ev->button() == Qt::RightButton)
     {

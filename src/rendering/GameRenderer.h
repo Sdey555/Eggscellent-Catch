@@ -9,6 +9,7 @@
 class GameEngine;
 class MyGrid;
 class MyPixels;
+class AudioManager;
 struct CompanionBasket;
 struct StickyPuddle;
 
@@ -24,7 +25,20 @@ public:
                         int width,
                         int height,
                         int scale,
-                        int hudTick);
+                        int hudTick,
+                        const AudioManager *audio = nullptr);
+
+    static void renderPauseMenu(QPainter &painter, const GameEngine &engine, int width, int height);
+    static void renderSettingsPage(QPainter &painter, const GameEngine &engine, const AudioManager *audio, int scale, int width, int height);
+
+    // On-screen touch button layouts
+    static QRect getPauseButtonRect(int width, int height);
+    static QRect getVirtualLeftButtonRect(int width, int height);
+    static QRect getVirtualRightButtonRect(int width, int height);
+    static QRect getGrowthButtonRect(int width, int height);
+    static QRect getCompanionButtonRect(int width, int height);
+
+    static void renderOnScreenControls(QPainter &painter, const GameEngine &engine, int width, int height);
 
     // Rasterization helper functions
     static void paintCell(QPainter &painter,

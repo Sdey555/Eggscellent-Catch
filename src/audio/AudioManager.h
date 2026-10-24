@@ -32,6 +32,11 @@ public:
     float getBGMVolume() const { return bgmVolume; }
     float getSFXVolume() const { return sfxVolume; }
 
+    bool isBGMMuted() const { return bgmMuted; }
+    bool isSFXMuted() const { return sfxMuted; }
+    void setBGMMuted(bool mute);
+    void setSFXMuted(bool mute);
+
     void toggleMute();
     bool isMuted() const { return muted; }
     void setMuted(bool mute);
@@ -41,6 +46,8 @@ private:
     void setupSoundPool(SoundId id, const QString &fileName, int poolSize = 1);
 
     bool muted{false};
+    bool bgmMuted{false};
+    bool sfxMuted{false};
     float bgmVolume{0.38f};
     float sfxVolume{0.75f};
 

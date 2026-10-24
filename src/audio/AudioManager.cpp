@@ -88,8 +88,11 @@ void AudioManager::playSound(SoundId sound)
     QSoundEffect *effect = pool.effects[pool.nextIndex];
     pool.nextIndex = (pool.nextIndex + 1) % pool.effects.size();
 
-    effect->setVolume(sfxVolume);
-    effect->play();
+    const float effVol = (muted || sfxMuted) ? 0.0f : sfxVolume;
+    effect->setVolume(effVol);
+    if (effVol > 0.001f) {
+        effect->play();
+    }
 }
 
 void AudioManager::playBGM()
@@ -97,8 +100,9 @@ void AudioManager::playBGM()
     if (!bgmEffect) {
         return;
     }
-    bgmEffect->setVolume(muted ? 0.0f : bgmVolume);
-    if (!bgmEffect->isPlaying()) {
+    const float effVol = (muted || bgmMuted) ? 0.0f : bgmVolume;
+    bgmEffect->setVolume(effVol);
+    if (effVol > 0.001f && !bgmEffect->isPlaying()) {
         bgmEffect->play();
     }
 }
@@ -119,7 +123,9 @@ void AudioManager::pauseBGM()
 
 void AudioManager::resumeBGM()
 {
-    if (bgmEffect && !muted && !bgmEffect->isPlaying()) {
+    const float effVol = (muted || bgmMuted) ? 0.0f : bgmVolume;
+    if (bgmEffect && effVol > 0.001f && !bgmEffect->isPlaying()) {
+        bgmEffect->setVolume(effVol);
         bgmEffect->play();
     }
 }
@@ -127,21 +133,38 @@ void AudioManager::resumeBGM()
 void AudioManager::setBGMVolume(float volume)
 {
     bgmVolume = std::clamp(volume, 0.0f, 1.0f);
-    if (bgmEffect && !muted) {
-        bgmEffect->setVolume(bgmVolume);
+    if (bgmEffect) {
+        const float effVol = (muted || bgmMuted) ? 0.0f : bgmVolume;
+        bgmEffect->setVolume(effVol);
+        if (effVol > 0.001f && !bgmEffect->isPlaying()) {
+            bgmEffect->play();
+        } else if (effVol <= 0.001f && bgmEffect->isPlaying()) {
+            bgmEffect->stop();
+        }
     }
 }
 
 void AudioManager::setSFXVolume(float volume)
 {
     sfxVolume = std::clamp(volume, 0.0f, 1.0f);
-    if (!muted) {
-        for (auto &pool : soundPools) {
-            for (auto *effect : pool.effects) {
-                effect->setVolume(sfxVolume);
-            }
+    const float effVol = (muted || sfxMuted) ? 0.0f : sfxVolume;
+    for (auto &pool : soundPools) {
+        for (auto *effect : pool.effects) {
+            effect->setVolume(effVol);
         }
     }
+}
+
+void AudioManager::setBGMMuted(bool mute)
+{
+    bgmMuted = mute;
+    setBGMVolume(bgmVolume);
+}
+
+void AudioManager::setSFXMuted(bool mute)
+{
+    sfxMuted = mute;
+    setSFXVolume(sfxVolume);
 }
 
 void AudioManager::toggleMute()
@@ -152,18 +175,6 @@ void AudioManager::toggleMute()
 void AudioManager::setMuted(bool mute)
 {
     muted = mute;
-    if (bgmEffect) {
-        bgmEffect->setVolume(muted ? 0.0f : bgmVolume);
-        if (muted && bgmEffect->isPlaying()) {
-            bgmEffect->stop();
-        } else if (!muted && !bgmEffect->isPlaying()) {
-            bgmEffect->play();
-        }
-    }
-
-    for (auto &pool : soundPools) {
-        for (auto *effect : pool.effects) {
-            effect->setVolume(muted ? 0.0f : sfxVolume);
-        }
-    }
+    setBGMVolume(bgmVolume);
+    setSFXVolume(sfxVolume);
 }

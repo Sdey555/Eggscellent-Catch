@@ -1,5 +1,6 @@
 #include "GameRenderer.h"
 #include "GameEngine.h"
+#include "AudioManager.h"
 #include "Grid.h"
 #include "Pixel.h"
 #include "PixelFont.h"
@@ -917,7 +918,8 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
                                   int width,
                                   int height,
                                   int scale,
-                                  int hudTick)
+                                  int hudTick,
+                                  const AudioManager *audio)
 {
     if (width <= 10 || height <= 10)
     {
@@ -939,7 +941,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     const double dnProg = engine.getDayNightProgress();
     const double nightRatio = engine.getNightDurationRatio();
     const bool isStorm = engine.isThunderstormActive();
-    const int flashTicks = engine.getLightningFlashTicks();
+    const int flashTicks = engine.isLightningFlashEnabled() ? engine.getLightningFlashTicks() : 0;
 
     // -------------------------------------------------------------
     // BACKGROUND PASS: 100% Pure Pixelated World
@@ -1399,6 +1401,15 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.setPen(QColor(255, 209, 102));
         painter.drawText(QRect(cardX, cardY + 10, cardW, 36), Qt::AlignCenter, "EGGSCELLENT CATCH");
 
+        // Settings Button on Main Menu Card
+        const QRect menuSettingsBtn(cardX + cardW - 105, cardY + 16, 85, 26);
+        painter.setFont(QFont("Segoe UI", 9, QFont::Bold));
+        painter.setPen(QPen(QColor(0, 229, 255), 1));
+        painter.setBrush(QColor(18, 44, 62));
+        painter.drawRoundedRect(menuSettingsBtn, 6, 6);
+        painter.setPen(QColor(0, 229, 255));
+        painter.drawText(menuSettingsBtn, Qt::AlignCenter, "⚙ Settings");
+
         const int modeBtnW = 100;
         const int modeBtnH = 26;
         const int modeBarY = cardY + 75;
@@ -1591,22 +1602,532 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.drawText(QRect(0, height / 2 + 60, width, 30), Qt::AlignCenter,
                          "Press [R] to restore / restart or [SPACE] to play again");
     }
+    else if (engine.getState() == GameState::PLAYING)
+    {
+        renderOnScreenControls(painter, engine, width, height);
+    }
     else if (engine.getState() == GameState::PAUSED)
     {
-        painter.fillRect(0, 0, width, height, QColor(10, 12, 18, 180));
-
-        painter.setPen(QColor(255, 209, 102));
-        QFont pauseFont("Segoe UI", 28, QFont::Bold);
-        painter.setFont(pauseFont);
-        painter.drawText(QRect(0, height / 2 - 50, width, 50), Qt::AlignCenter, "PAUSED");
-
-        painter.setPen(QColor(224, 230, 237));
-        QFont promptFont("Segoe UI", 13, QFont::Normal);
-        painter.setFont(promptFont);
-        painter.drawText(QRect(0, height / 2 + 15, width, 30), Qt::AlignCenter,
-                         "Press [ESC] to resume or [R] to restart");
+        renderPauseMenu(painter, engine, width, height);
+    }
+    else if (engine.getState() == GameState::SETTINGS)
+    {
+        renderSettingsPage(painter, engine, audio, scale, width, height);
     }
 
     painter.end();
     return pix;
+}
+
+QRect GameRenderer::getPauseButtonRect(int width, int height)
+{
+    Q_UNUSED(height);
+    const int sz = 36;
+    return QRect(width - sz - 16, 14, sz, sz);
+}
+
+QRect GameRenderer::getVirtualLeftButtonRect(int width, int height)
+{
+    const int btnW = std::clamp(width / 7, 68, 96);
+    const int btnH = std::clamp(height / 7, 52, 72);
+    return QRect(16, height - btnH - 16, btnW, btnH);
+}
+
+QRect GameRenderer::getVirtualRightButtonRect(int width, int height)
+{
+    const int btnW = std::clamp(width / 7, 68, 96);
+    const int btnH = std::clamp(height / 7, 52, 72);
+    return QRect(width - btnW - 16, height - btnH - 16, btnW, btnH);
+}
+
+QRect GameRenderer::getGrowthButtonRect(int width, int height)
+{
+    const int btnH = std::clamp(height / 7, 52, 72);
+    const int sz = std::clamp(height / 9, 42, 54);
+    return QRect(width - sz - 20, height - btnH - sz - 26, sz, sz);
+}
+
+QRect GameRenderer::getCompanionButtonRect(int width, int height)
+{
+    const int btnH = std::clamp(height / 7, 52, 72);
+    const int sz = std::clamp(height / 9, 42, 54);
+    return QRect(width - (sz * 2) - 30, height - btnH - sz - 26, sz, sz);
+}
+
+void GameRenderer::renderOnScreenControls(QPainter &painter, const GameEngine &engine, int width, int height)
+{
+    // 1. Pause Button [ ⏸ ]
+    const QRect pauseRect = getPauseButtonRect(width, height);
+    painter.setPen(QPen(QColor(0, 229, 255, 180), 1.5));
+    painter.setBrush(QColor(16, 24, 38, 180));
+    painter.drawRoundedRect(pauseRect, 8, 8);
+    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
+    painter.setPen(QColor(0, 229, 255));
+    painter.drawText(pauseRect, Qt::AlignCenter, "⏸");
+
+    // 2. Growth Egg Button [ 🧺 H ] (visible when player holds growth eggs)
+    if (engine.getGrowthEggCount() > 0)
+    {
+        const QRect hRect = getGrowthButtonRect(width, height);
+        painter.setPen(QPen(QColor(46, 204, 113, 220), 2));
+        painter.setBrush(QColor(22, 54, 38, 200));
+        painter.drawRoundedRect(hRect, 10, 10);
+        painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
+        painter.setPen(QColor(46, 204, 113));
+        painter.drawText(QRect(hRect.x(), hRect.y() + 4, hRect.width(), 18), Qt::AlignCenter, "🧺 H");
+        painter.setFont(QFont("Segoe UI", 8, QFont::Bold));
+        painter.setPen(QColor(255, 255, 255));
+        painter.drawText(QRect(hRect.x(), hRect.y() + 22, hRect.width(), 16), Qt::AlignCenter,
+                         QString("x%1").arg(engine.getGrowthEggCount()));
+    }
+
+    // 3. Companion Basket Button [ 🤖 C ] (visible in Hard mode when at least 2 eggs held)
+    if (engine.getMode() == GameMode::HARD && engine.getGrowthEggCount() >= 2)
+    {
+        const QRect cRect = getCompanionButtonRect(width, height);
+        painter.setPen(QPen(QColor(0, 229, 255, 220), 2));
+        painter.setBrush(QColor(18, 44, 62, 200));
+        painter.drawRoundedRect(cRect, 10, 10);
+        painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
+        painter.setPen(QColor(0, 229, 255));
+        painter.drawText(QRect(cRect.x(), cRect.y() + 4, cRect.width(), 18), Qt::AlignCenter, "🤖 C");
+        painter.setFont(QFont("Segoe UI", 8, QFont::Bold));
+        painter.setPen(QColor(255, 255, 255));
+        painter.drawText(QRect(cRect.x(), cRect.y() + 22, cRect.width(), 16), Qt::AlignCenter, "SUMMON");
+    }
+
+    // 4. Mode-Specific Overlays
+    const ControlMode mode = engine.getControlMode();
+    if (mode == ControlMode::VIRTUAL_BUTTONS)
+    {
+        // Left Button [ ◀ ]
+        const QRect leftRect = getVirtualLeftButtonRect(width, height);
+        const bool leftDown = engine.isKeyLeftPressed();
+        painter.setPen(QPen(leftDown ? QColor(0, 255, 255) : QColor(0, 229, 255, 160), leftDown ? 2.5 : 1.5));
+        painter.setBrush(leftDown ? QColor(0, 200, 240, 130) : QColor(14, 22, 36, 160));
+        painter.drawRoundedRect(leftRect, 14, 14);
+
+        painter.setFont(QFont("Segoe UI", 22, QFont::Bold));
+        painter.setPen(leftDown ? QColor(255, 255, 255) : QColor(0, 229, 255));
+        painter.drawText(leftRect, Qt::AlignCenter, "◀");
+
+        // Right Button [ ▶ ]
+        const QRect rightRect = getVirtualRightButtonRect(width, height);
+        const bool rightDown = engine.isKeyRightPressed();
+        painter.setPen(QPen(rightDown ? QColor(0, 255, 255) : QColor(0, 229, 255, 160), rightDown ? 2.5 : 1.5));
+        painter.setBrush(rightDown ? QColor(0, 200, 240, 130) : QColor(14, 22, 36, 160));
+        painter.drawRoundedRect(rightRect, 14, 14);
+
+        painter.setFont(QFont("Segoe UI", 22, QFont::Bold));
+        painter.setPen(rightDown ? QColor(255, 255, 255) : QColor(0, 229, 255));
+        painter.drawText(rightRect, Qt::AlignCenter, "▶");
+    }
+    else if (mode == ControlMode::GYROSCOPE)
+    {
+        // Sleek Tilt Bubble Indicator at bottom-center
+        const int barW = 160;
+        const int barH = 22;
+        const int barX = (width - barW) / 2;
+        const int barY = height - barH - 12;
+        const QRect barRect(barX, barY, barW, barH);
+
+        painter.setPen(QPen(QColor(60, 75, 105, 180), 1.5));
+        painter.setBrush(QColor(12, 16, 26, 170));
+        painter.drawRoundedRect(barRect, 11, 11);
+
+        // Center line
+        painter.setPen(QColor(100, 120, 150, 180));
+        painter.drawLine(barX + barW / 2, barY + 3, barX + barW / 2, barY + barH - 3);
+
+        // Tilt bubble
+        const float tilt = engine.getGyroTilt();
+        const int bubbleCenterX = barX + barW / 2 + static_cast<int>(tilt * (barW / 2 - 12));
+        const int bubbleRadius = 8;
+        painter.setPen(QPen(QColor(0, 255, 255), 1.5));
+        painter.setBrush(QColor(0, 229, 255, 210));
+        painter.drawEllipse(QPoint(bubbleCenterX, barY + barH / 2), bubbleRadius, bubbleRadius);
+
+        // Subtle arrows
+        painter.setFont(QFont("Segoe UI", 8, QFont::Bold));
+        painter.setPen(tilt < -0.1f ? QColor(0, 255, 255) : QColor(90, 110, 135));
+        painter.drawText(QRect(barX + 6, barY, 14, barH), Qt::AlignCenter, "◀");
+        painter.setPen(tilt > 0.1f ? QColor(0, 255, 255) : QColor(90, 110, 135));
+        painter.drawText(QRect(barX + barW - 20, barY, 14, barH), Qt::AlignCenter, "▶");
+    }
+}
+
+void GameRenderer::renderPauseMenu(QPainter &painter, const GameEngine &engine, int width, int height)
+{
+    // Dim background overlay
+    painter.fillRect(0, 0, width, height, QColor(10, 13, 22, 205));
+
+    const int cardW = std::min(width - 40, 420);
+    const int cardH = std::min(height - 40, 360);
+    const int cardX = (width - cardW) / 2;
+    const int cardY = (height - cardH) / 2;
+
+    // Card frame
+    painter.setPen(QPen(QColor(56, 70, 96), 2));
+    painter.setBrush(QColor(18, 22, 34, 250));
+    painter.drawRoundedRect(cardX, cardY, cardW, cardH, 12, 12);
+
+    // Title
+    QFont titleFont("Segoe UI", 18, QFont::Bold);
+    painter.setFont(titleFont);
+    painter.setPen(QColor(0, 0, 0, 180));
+    painter.drawText(QRect(cardX + 2, cardY + 12, cardW, 28), Qt::AlignCenter, "⏸ GAME PAUSED");
+    painter.setPen(QColor(255, 209, 102));
+    painter.drawText(QRect(cardX, cardY + 10, cardW, 28), Qt::AlignCenter, "⏸ GAME PAUSED");
+
+    // Stats line
+    QFont statsFont("Segoe UI", 10, QFont::Normal);
+    painter.setFont(statsFont);
+    painter.setPen(QColor(168, 199, 250));
+    QString heartsStr;
+    for (int i = 0; i < engine.getHearts(); ++i) heartsStr += "♥ ";
+    QString statsText = QString("Score: %1   •   Level: %2   •   Hearts: %3")
+                            .arg(engine.getScore())
+                            .arg(engine.getLevel())
+                            .arg(heartsStr.trimmed());
+    painter.drawText(QRect(cardX, cardY + 40, cardW, 18), Qt::AlignCenter, statsText);
+
+    // Accent line
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 209, 102, 180));
+    painter.drawRoundedRect(cardX + 24, cardY + 64, cardW - 48, 1, 1, 1);
+
+    // Difficulty Mode Selector Pills
+    const int modeBtnW = std::min(104, (cardW - 60) / 3);
+    const int modeBtnH = 27;
+    const int modeGap = 8;
+    const int totalModeW = modeBtnW * 3 + modeGap * 2;
+    const int startModeX = cardX + (cardW - totalModeW) / 2;
+    const int modeBarY = cardY + 74;
+
+    QFont modeBtnFont("Segoe UI", 10, QFont::Bold);
+    painter.setFont(modeBtnFont);
+
+    // EASY button
+    const bool isEasy = (engine.getMode() == GameMode::EASY);
+    const QRect easyRect(startModeX, modeBarY, modeBtnW, modeBtnH);
+    painter.setPen(QPen(isEasy ? QColor(46, 204, 113) : QColor(60, 75, 90), isEasy ? 2 : 1));
+    painter.setBrush(isEasy ? QColor(25, 55, 38) : QColor(26, 32, 44));
+    painter.drawRoundedRect(easyRect, 6, 6);
+    painter.setPen(isEasy ? QColor(46, 204, 113) : QColor(160, 175, 190));
+    painter.drawText(easyRect, Qt::AlignCenter, isEasy ? "● EASY" : "EASY");
+
+    // MEDIUM button
+    const bool isMed = (engine.getMode() == GameMode::MEDIUM);
+    const QRect medRect(startModeX + modeBtnW + modeGap, modeBarY, modeBtnW, modeBtnH);
+    painter.setPen(QPen(isMed ? QColor(255, 183, 3) : QColor(60, 75, 90), isMed ? 2 : 1));
+    painter.setBrush(isMed ? QColor(55, 45, 20) : QColor(26, 32, 44));
+    painter.drawRoundedRect(medRect, 6, 6);
+    painter.setPen(isMed ? QColor(255, 183, 3) : QColor(160, 175, 190));
+    painter.drawText(medRect, Qt::AlignCenter, isMed ? "● MEDIUM" : "MEDIUM");
+
+    // HARD button
+    const bool isHard = (engine.getMode() == GameMode::HARD);
+    const QRect hardRect(startModeX + (modeBtnW + modeGap) * 2, modeBarY, modeBtnW, modeBtnH);
+    painter.setPen(QPen(isHard ? QColor(239, 71, 111) : QColor(60, 75, 90), isHard ? 2 : 1));
+    painter.setBrush(isHard ? QColor(60, 25, 35) : QColor(26, 32, 44));
+    painter.drawRoundedRect(hardRect, 6, 6);
+    painter.setPen(isHard ? QColor(239, 71, 111) : QColor(160, 175, 190));
+    painter.drawText(hardRect, Qt::AlignCenter, isHard ? "● HARD" : "HARD");
+
+    // Mode Brief Subtext
+    QFont modeSumFont("Segoe UI", 8, QFont::Normal);
+    painter.setFont(modeSumFont);
+    QString modeSummary;
+    if (isEasy)
+    {
+        modeSummary = "✓ Calm skies  •  1 starting bird  •  Standard drops";
+    }
+    else if (isMed)
+    {
+        modeSummary = "⚡ 2 starting birds  •  Faster scaling  •  Sticky poop";
+    }
+    else
+    {
+        modeSummary = "🔥 2 starting birds  •  Fierce speed  •  Companion basket";
+    }
+    painter.setPen(QColor(168, 199, 250));
+    painter.drawText(QRect(cardX, modeBarY + 31, cardW, 16), Qt::AlignCenter, modeSummary);
+
+    // Action Buttons
+    const int btnW = cardW - 70;
+    const int btnH = 36;
+    const int btnGap = 9;
+    const int btnX = cardX + (cardW - btnW) / 2;
+    const int startY = cardY + 130;
+
+    QFont btnFont("Segoe UI", 11, QFont::Bold);
+    painter.setFont(btnFont);
+
+    // 1. Resume Button
+    const QRect btnResume(btnX, startY, btnW, btnH);
+    painter.setPen(QPen(QColor(46, 204, 113), 2));
+    painter.setBrush(QColor(22, 54, 38));
+    painter.drawRoundedRect(btnResume, 8, 8);
+    painter.setPen(QColor(46, 204, 113));
+    painter.drawText(btnResume, Qt::AlignCenter, "▶   Resume Game   [ESC]");
+
+    // 2. Settings Button
+    const QRect btnSettings(btnX, startY + (btnH + btnGap), btnW, btnH);
+    painter.setPen(QPen(QColor(0, 229, 255), 2));
+    painter.setBrush(QColor(18, 44, 62));
+    painter.drawRoundedRect(btnSettings, 8, 8);
+    painter.setPen(QColor(0, 229, 255));
+    painter.drawText(btnSettings, Qt::AlignCenter, "⚙   Game Settings");
+
+    // 3. Restart Button
+    const QRect btnRestart(btnX, startY + (btnH + btnGap) * 2, btnW, btnH);
+    painter.setPen(QPen(QColor(255, 183, 3), 2));
+    painter.setBrush(QColor(52, 40, 18));
+    painter.drawRoundedRect(btnRestart, 8, 8);
+    painter.setPen(QColor(255, 183, 3));
+    painter.drawText(btnRestart, Qt::AlignCenter, "↻   Restart Run   [R]");
+
+    // 4. Main Menu Button
+    const QRect btnMainMenu(btnX, startY + (btnH + btnGap) * 3, btnW, btnH);
+    painter.setPen(QPen(QColor(239, 71, 111), 2));
+    painter.setBrush(QColor(56, 24, 36));
+    painter.drawRoundedRect(btnMainMenu, 8, 8);
+    painter.setPen(QColor(239, 71, 111));
+    painter.drawText(btnMainMenu, Qt::AlignCenter, "⌂   Main Menu (Starting Page)");
+
+    // Hint
+    QFont hintFont("Segoe UI", 9, QFont::Normal);
+    painter.setFont(hintFont);
+    painter.setPen(QColor(139, 155, 180));
+    painter.drawText(QRect(cardX, cardY + cardH - 26, cardW, 20), Qt::AlignCenter,
+                     "Press [ESC] to resume  •  [1-3] or [Tab] for mode  •  [R] to restart");
+}
+
+void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engine, const AudioManager *audio, int scale, int width, int height)
+{
+    // Dim background overlay
+    painter.fillRect(0, 0, width, height, QColor(8, 12, 20, 225));
+
+    const int cardW = std::min(width - 40, 560);
+    const int cardH = std::min(height - 40, 480);
+    const int cardX = (width - cardW) / 2;
+    const int cardY = (height - cardH) / 2;
+
+    // Card frame
+    painter.setPen(QPen(QColor(48, 70, 105), 2));
+    painter.setBrush(QColor(18, 22, 34, 252));
+    painter.drawRoundedRect(cardX, cardY, cardW, cardH, 12, 12);
+
+    // Accent line
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 229, 255));
+    painter.drawRoundedRect(cardX + 24, cardY + 58, cardW - 48, 2, 1, 1);
+
+    // Title
+    QFont titleFont("Segoe UI", 20, QFont::Bold);
+    painter.setFont(titleFont);
+    painter.setPen(QColor(0, 0, 0, 180));
+    painter.drawText(QRect(cardX + 2, cardY + 14, cardW, 32), Qt::AlignCenter, "⚙ GAME SETTINGS");
+    painter.setPen(QColor(0, 229, 255));
+    painter.drawText(QRect(cardX, cardY + 12, cardW, 32), Qt::AlignCenter, "⚙ GAME SETTINGS");
+
+    const int rowLeftX = cardX + 35;
+    QFont lblFont("Segoe UI", 11, QFont::Bold);
+    QFont btnFont("Segoe UI", 10, QFont::Bold);
+
+    // --- ROW 1: Music (BGM) ---
+    const int y1 = cardY + 76;
+    painter.setFont(lblFont);
+    painter.setPen(QColor(224, 230, 237));
+    painter.drawText(QRect(rowLeftX, y1, 130, 28), Qt::AlignLeft | Qt::AlignVCenter, "Music (BGM):");
+
+    const bool bgmMuted = audio ? audio->isBGMMuted() : false;
+    const float bgmVol = audio ? audio->getBGMVolume() : 0.38f;
+
+    // Mute toggle
+    painter.setFont(btnFont);
+    const QRect bgmMuteBtn(rowLeftX + 130, y1, 65, 26);
+    painter.setPen(QPen(bgmMuted ? QColor(239, 71, 111) : QColor(46, 204, 113), 1));
+    painter.setBrush(bgmMuted ? QColor(56, 24, 36) : QColor(22, 54, 38));
+    painter.drawRoundedRect(bgmMuteBtn, 6, 6);
+    painter.setPen(bgmMuted ? QColor(239, 71, 111) : QColor(46, 204, 113));
+    painter.drawText(bgmMuteBtn, Qt::AlignCenter, bgmMuted ? "MUTED" : "ON");
+
+    // Volume Presets (0%, 25%, 50%, 75%, 100%)
+    const int volStartX = rowLeftX + 205;
+    const int volBtnW = 50;
+    const int volBtnH = 26;
+    const int volGap = 7;
+    const float volValues[5] = {0.0f, 0.25f, 0.50f, 0.75f, 1.0f};
+    const QString volLabels[5] = {"0%", "25%", "50%", "75%", "100%"};
+
+    for (int i = 0; i < 5; ++i)
+    {
+        const QRect vb(volStartX + i * (volBtnW + volGap), y1, volBtnW, volBtnH);
+        const bool active = (!bgmMuted && std::abs(bgmVol - volValues[i]) < 0.13f);
+        painter.setPen(QPen(active ? QColor(255, 209, 102) : QColor(60, 75, 95), active ? 2 : 1));
+        painter.setBrush(active ? QColor(55, 45, 20) : QColor(26, 32, 44));
+        painter.drawRoundedRect(vb, 6, 6);
+        painter.setPen(active ? QColor(255, 209, 102) : QColor(160, 175, 195));
+        painter.drawText(vb, Qt::AlignCenter, volLabels[i]);
+    }
+
+    // --- ROW 2: Sound Effects (SFX) ---
+    const int y2 = cardY + 124;
+    painter.setFont(lblFont);
+    painter.setPen(QColor(224, 230, 237));
+    painter.drawText(QRect(rowLeftX, y2, 130, 28), Qt::AlignLeft | Qt::AlignVCenter, "Sound FX (SFX):");
+
+    const bool sfxMuted = audio ? audio->isSFXMuted() : false;
+    const float sfxVol = audio ? audio->getSFXVolume() : 0.75f;
+
+    // SFX Mute toggle
+    painter.setFont(btnFont);
+    const QRect sfxMuteBtn(rowLeftX + 130, y2, 65, 26);
+    painter.setPen(QPen(sfxMuted ? QColor(239, 71, 111) : QColor(46, 204, 113), 1));
+    painter.setBrush(sfxMuted ? QColor(56, 24, 36) : QColor(22, 54, 38));
+    painter.drawRoundedRect(sfxMuteBtn, 6, 6);
+    painter.setPen(sfxMuted ? QColor(239, 71, 111) : QColor(46, 204, 113));
+    painter.drawText(sfxMuteBtn, Qt::AlignCenter, sfxMuted ? "MUTED" : "ON");
+
+    for (int i = 0; i < 5; ++i)
+    {
+        const QRect vb(volStartX + i * (volBtnW + volGap), y2, volBtnW, volBtnH);
+        const bool active = (!sfxMuted && std::abs(sfxVol - volValues[i]) < 0.13f);
+        painter.setPen(QPen(active ? QColor(255, 209, 102) : QColor(60, 75, 95), active ? 2 : 1));
+        painter.setBrush(active ? QColor(55, 45, 20) : QColor(26, 32, 44));
+        painter.drawRoundedRect(vb, 6, 6);
+        painter.setPen(active ? QColor(255, 209, 102) : QColor(160, 175, 195));
+        painter.drawText(vb, Qt::AlignCenter, volLabels[i]);
+    }
+
+    // --- ROW 3: Input Controls ---
+    const int y3 = cardY + 172;
+    painter.setFont(lblFont);
+    painter.setPen(QColor(224, 230, 237));
+    painter.drawText(QRect(rowLeftX, y3, 115, 28), Qt::AlignLeft | Qt::AlignVCenter, "Controls:");
+
+    const ControlMode curMode = engine.getControlMode();
+    const int ctlStartX = rowLeftX + 115;
+    const int ctlBtnW = 86;
+    const int ctlBtnH = 26;
+    const int ctlGap = 6;
+
+    const struct {
+        ControlMode mode;
+        const char *label;
+        QColor activeColor;
+        QColor activeBg;
+    } ctlOptions[4] = {
+        {ControlMode::SCREEN_TOUCH,    "📱 Touch",       QColor(0, 229, 255),   QColor(18, 44, 62)},
+        {ControlMode::VIRTUAL_BUTTONS, "🎮 Buttons",     QColor(46, 204, 113),  QColor(22, 54, 38)},
+        {ControlMode::GYROSCOPE,       "🔄 Gyro",        QColor(199, 125, 255), QColor(45, 25, 55)},
+        {ControlMode::MOUSE_KEYBOARD,  "🖱 Mouse/Keys",  QColor(255, 209, 102), QColor(55, 45, 20)}
+    };
+
+    painter.setFont(btnFont);
+    for (int i = 0; i < 4; ++i)
+    {
+        const QRect cb(ctlStartX + i * (ctlBtnW + ctlGap), y3, ctlBtnW, ctlBtnH);
+        const bool active = (curMode == ctlOptions[i].mode);
+        painter.setPen(QPen(active ? ctlOptions[i].activeColor : QColor(60, 75, 95), active ? 2 : 1));
+        painter.setBrush(active ? ctlOptions[i].activeBg : QColor(26, 32, 44));
+        painter.drawRoundedRect(cb, 6, 6);
+        painter.setPen(active ? ctlOptions[i].activeColor : QColor(160, 175, 195));
+        painter.drawText(cb, Qt::AlignCenter, ctlOptions[i].label);
+    }
+
+    // --- ROW 4: Thunder Screen Flash (Photosensitivity) ---
+    const int y4 = cardY + 220;
+    painter.setFont(lblFont);
+    painter.setPen(QColor(224, 230, 237));
+    painter.drawText(QRect(rowLeftX, y4, 130, 28), Qt::AlignLeft | Qt::AlignVCenter, "Thunder Flash:");
+
+    const bool flashOn = engine.isLightningFlashEnabled();
+    const QRect btnFlashOn(rowLeftX + 130, y4, 110, 26);
+    const QRect btnFlashOff(rowLeftX + 250, y4, 160, 26);
+
+    painter.setFont(btnFont);
+    painter.setPen(QPen(flashOn ? QColor(46, 204, 113) : QColor(60, 75, 95), flashOn ? 2 : 1));
+    painter.setBrush(flashOn ? QColor(22, 54, 38) : QColor(26, 32, 44));
+    painter.drawRoundedRect(btnFlashOn, 6, 6);
+    painter.setPen(flashOn ? QColor(46, 204, 113) : QColor(160, 175, 195));
+    painter.drawText(btnFlashOn, Qt::AlignCenter, "⚡ Flash ON");
+
+    painter.setPen(QPen(!flashOn ? QColor(255, 183, 3) : QColor(60, 75, 95), !flashOn ? 2 : 1));
+    painter.setBrush(!flashOn ? QColor(55, 45, 20) : QColor(26, 32, 44));
+    painter.drawRoundedRect(btnFlashOff, 6, 6);
+    painter.setPen(!flashOn ? QColor(255, 183, 3) : QColor(160, 175, 195));
+    painter.drawText(btnFlashOff, Qt::AlignCenter, "🛡 OFF (Reduced)");
+
+    // --- ROW 5: Pixel Art Scale ---
+    const int y5 = cardY + 268;
+    painter.setFont(lblFont);
+    painter.setPen(QColor(224, 230, 237));
+    painter.drawText(QRect(rowLeftX, y5, 130, 28), Qt::AlignLeft | Qt::AlignVCenter, "Graphics Scale:");
+
+    const int scales[4] = {3, 4, 5, 6};
+    const QString scaleLabels[4] = {"3x", "4x", "5x", "6x"};
+    for (int i = 0; i < 4; ++i)
+    {
+        const QRect sb(rowLeftX + 130 + i * 65, y5, 55, 26);
+        const bool active = (scale == scales[i]);
+        painter.setPen(QPen(active ? QColor(199, 125, 255) : QColor(60, 75, 95), active ? 2 : 1));
+        painter.setBrush(active ? QColor(45, 25, 55) : QColor(26, 32, 44));
+        painter.drawRoundedRect(sb, 6, 6);
+        painter.setPen(active ? QColor(199, 125, 255) : QColor(160, 175, 195));
+        painter.drawText(sb, Qt::AlignCenter, scaleLabels[i]);
+    }
+
+    // --- Keybinds Overview Panel ---
+    const int y6 = cardY + 314;
+    const QRect keyBox(rowLeftX, y6, cardW - 70, 70);
+    painter.setPen(QPen(QColor(42, 54, 76), 1));
+    painter.setBrush(QColor(14, 18, 28, 200));
+    painter.drawRoundedRect(keyBox, 8, 8);
+
+    QFont keyTitleFont("Segoe UI", 9, QFont::Bold);
+    painter.setFont(keyTitleFont);
+    painter.setPen(QColor(255, 209, 102));
+    painter.drawText(QRect(rowLeftX + 10, y6 + 6, cardW - 90, 16), Qt::AlignLeft, "QUICK CONTROLS REFERENCE:");
+
+    QFont keyBodyFont("Segoe UI", 9, QFont::Normal);
+    painter.setFont(keyBodyFont);
+    painter.setPen(QColor(180, 195, 215));
+
+    QString moveTip;
+    if (curMode == ControlMode::SCREEN_TOUCH)
+    {
+        moveTip = "• Move: Touch or drag anywhere on screen to guide basket (speed-capped)";
+    }
+    else if (curMode == ControlMode::VIRTUAL_BUTTONS)
+    {
+        moveTip = "• Move: Touch [ ◀ ] and [ ▶ ] on-screen buttons on bottom corners";
+    }
+    else if (curMode == ControlMode::GYROSCOPE)
+    {
+        moveTip = "• Move: Tilt phone left / right to steer basket; hold flat to stop";
+    }
+    else
+    {
+        moveTip = "• Move: Mouse Cursor OR [A / D] / [Left / Right Arrow] Keys (speed-capped)";
+    }
+
+    painter.drawText(QRect(rowLeftX + 10, y6 + 26, cardW - 90, 18), Qt::AlignLeft, moveTip);
+    painter.drawText(QRect(rowLeftX + 10, y6 + 46, cardW - 90, 18), Qt::AlignLeft,
+                     "• [H] or 🧺 Button: Growth Egg  •  [C] or 🤖 Button: Companion (Hard)  •  [ESC] or ⏸: Pause");
+
+    // --- Back / Done Button ---
+    const int backW = 190;
+    const int backH = 36;
+    const int backX = cardX + (cardW - backW) / 2;
+    const int backY = cardY + cardH - 50;
+    const QRect btnBack(backX, backY, backW, backH);
+
+    painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
+    painter.setPen(QPen(QColor(0, 229, 255), 2));
+    painter.setBrush(QColor(18, 44, 62));
+    painter.drawRoundedRect(btnBack, 8, 8);
+    painter.setPen(QColor(0, 229, 255));
+    painter.drawText(btnBack, Qt::AlignCenter, "◀   Back / Done");
 }

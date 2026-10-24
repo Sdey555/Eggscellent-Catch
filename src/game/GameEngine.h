@@ -12,6 +12,7 @@
 #include "FallingEgg.h"
 #include "Particle.h"
 #include "Grid.h"
+#include "MotionSensor.h"
 
 // -------------------------------------------------------------
 // Core Game Engine: Manages Rules, Entities, Physics, Difficulty
@@ -65,6 +66,19 @@ public:
     void setStatusMessage(const QString &msg) { statusMessage = msg; }
 
     bool isMouseControl() const { return mouseControl; }
+    bool isMouseControlAllowed() const { return mouseControlAllowed; }
+    void setMouseControlAllowed(bool allowed) { mouseControlAllowed = allowed; }
+    bool isLightningFlashEnabled() const { return lightningFlashEnabled; }
+    void setLightningFlashEnabled(bool enabled) { lightningFlashEnabled = enabled; }
+
+    ControlMode getControlMode() const { return controlMode; }
+    void setControlMode(ControlMode m);
+    float getGyroTilt() const { return gyroTilt; }
+    void setGyroTilt(float t) { gyroTilt = t; }
+    bool isKeyLeftPressed() const { return keyLeftPressed; }
+    bool isKeyRightPressed() const { return keyRightPressed; }
+    bool isTouchActive() const { return touchActive; }
+    void handleTouchRelease() { touchActive = false; }
 
     int getGrowthEggCount() const { return growthEggCount; }
     const Basket& getBasket() const { return basket; }
@@ -142,6 +156,15 @@ private:
     bool keyLeftPressed{false};
     bool keyRightPressed{false};
     bool mouseControl{false};
+    bool mouseControlAllowed{true};
+    bool lightningFlashEnabled{true};
+#if defined(Q_OS_ANDROID)
+    ControlMode controlMode{ControlMode::SCREEN_TOUCH};
+#else
+    ControlMode controlMode{ControlMode::MOUSE_KEYBOARD};
+#endif
+    float gyroTilt{0.0f};
+    bool touchActive{false};
     int mouseScreenX{0};
     int lastMouseX{0};
 
