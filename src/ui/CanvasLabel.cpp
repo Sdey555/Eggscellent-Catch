@@ -1,18 +1,18 @@
 #include "CanvasLabel.h"
+#include <algorithm>
 
 CanvasLabel::CanvasLabel(QWidget *parent)
     : QLabel(parent)
 {
     this->setMouseTracking(true);
+    this->setCursor(Qt::CrossCursor);
 }
 
 void CanvasLabel::mouseMoveEvent(QMouseEvent *ev)
 {
-    QPoint pos = ev->pos();
-    if (pos.x() >= 0 && pos.y() >= 0 && pos.x() < this->width() && pos.y() < this->height())
-    {
-        emit sendMousePosition(pos);
-    }
+    const int clampedX = std::clamp(ev->pos().x(), 0, std::max(1, this->width() - 1));
+    QPoint clampedPos(clampedX, ev->pos().y());
+    emit sendMousePosition(clampedPos);
 
     if (isPanning)
     {
@@ -48,7 +48,8 @@ void CanvasLabel::mousePressEvent(QMouseEvent *ev)
     {
         // Left button is reserved for gameplay (no panning) so the basket can follow the mouse
         isLeftPressed = true;
-        lastClick = ev->pos();
+        const int clampedX = std::clamp(ev->pos().x(), 0, std::max(1, this->width() - 1));
+        lastClick = QPoint(clampedX, ev->pos().y());
         emit Mouse_Pos();
     }
     else if (ev->button() == Qt::RightButton)

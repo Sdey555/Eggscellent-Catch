@@ -1,0 +1,19 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/">
+    <file>audio/bgm_cheerful.wav</file>
+    <file>audio/sfx_catch_regular.wav</file>
+    <file>audio/sfx_catch_golden.wav</file>
+    <file>audio/sfx_catch_grow.wav</file>
+    <file>audio/sfx_catch_legendary.wav</file>
+    <file>audio/sfx_splat.wav</file>
+    <file>audio/sfx_poop_hit.wav</file>
+    <file>audio/sfx_poop_ground.wav</file>
+    <file>audio/sfx_thunder.wav</file>
+    <file>audio/sfx_shock.wav</file>
+    <file>audio/sfx_level_up.wav</file>
+    <file>audio/sfx_game_over.wav</file>
+    <file>audio/sfx_grow_use.wav</file>
+    <file>audio/sfx_companion_spawn.wav</file>
+    <file>audio/sfx_ui_click.wav</file>
+</qresource>
+</RCC>

@@ -23,11 +23,26 @@ void GameEngine::init(const MyGrid &grid)
     levelBannerTicks = 0;
     lastRestoreEggLevel = 0;
     lastGrowEggMissLevel = 0;
+    growthEggCount = 0;
     legendaryBirdActive = false;
     legendaryEggDropped = false;
     legendaryAnimTick = 0;
 
-    fallingEgg.active = false;
+    dayNightTick = 0;
+    thunderstormActive = false;
+    thunderstormTicks = 0;
+    thunderstormCooldown = 2800 + (rng() % 1600); // 90-140s rare initial cooldown
+    lightningFlashTicks = 0;
+    lightningShockTimer = 0;
+    lightningStrikeState = 0;
+    lightningStrikeTimer = 0;
+    lightningStrikeX = 0.0;
+
+    companionBasket.active = false;
+    companionBasket.ticksLeft = 0;
+
+    fallingEggs.clear();
+    stickyPuddles.clear();
     particles.clear();
     floatingTexts.clear();
 
@@ -41,7 +56,7 @@ void GameEngine::init(const MyGrid &grid)
 
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
 
-    // Initialize Basket (Enlarged)
+    // Initialize Basket
     basket.mathX = (minMathX + maxMathX) / 2.0;
     basket.mathY = groundMathY + 1;
     basket.halfWidth = 9;
@@ -52,6 +67,7 @@ void GameEngine::init(const MyGrid &grid)
     applyLevelSettings(grid);
 
     eggSpawnCooldown = 40;
+    dualDropCooldownTicks = 900 + (rng() % 600);
     statusMessage = "Welcome to Eggscellent Catch! Press START to play.";
 }
 
@@ -59,6 +75,142 @@ void GameEngine::reset(const MyGrid &grid)
 {
     init(grid);
     gameState = GameState::PLAYING;
+}
+
+void GameEngine::setMode(GameMode m)
+{
+    mode = m;
+    if (mode == GameMode::EASY)
+    {
+        statusMessage = "Difficulty: EASY (1 starting bird, calm skies).";
+    }
+    else if (mode == GameMode::MEDIUM)
+    {
+        statusMessage = "Difficulty: MEDIUM (2 starting birds, faster scaling, sticky poop!).";
+    }
+    else
+    {
+        statusMessage = "Difficulty: HARD (2 starting birds, fierce speed, rare dual drops, companion basket!).";
+    }
+}
+
+void GameEngine::setMode(GameMode m, const MyGrid &grid)
+{
+    setMode(m);
+    applyLevelSettings(grid);
+}
+
+void GameEngine::cycleMode(const MyGrid &grid)
+{
+    if (mode == GameMode::EASY)
+    {
+        setMode(GameMode::MEDIUM, grid);
+    }
+    else if (mode == GameMode::MEDIUM)
+    {
+        setMode(GameMode::HARD, grid);
+    }
+    else
+    {
+        setMode(GameMode::EASY, grid);
+    }
+}
+
+void GameEngine::useGrowthEgg()
+{
+    if (gameState != GameState::PLAYING)
+    {
+        return;
+    }
+
+    if (growthEggCount <= 0)
+    {
+        statusMessage = "No Growth Eggs in inventory! Catch a green egg first.";
+        return;
+    }
+
+    growthEggCount--;
+    basket.halfWidth = std::min(10, basket.halfWidth + 2); // Widen basket!
+    spawnCatchParticles(basket.mathX, basket.mathY + basket.height, QColor(46, 204, 113), 24);
+    addFloatingText(basket.mathX, basket.mathY + basket.height + 4.0, "🧺 SIZE UP! 🧺", QColor(46, 204, 113));
+    statusMessage = QString("🌟 Used 1 Growth Egg! Basket expanded! (%1 in inventory)").arg(growthEggCount);
+    triggerSound(SoundId::GROW_USE);
+}
+
+void GameEngine::summonCompanionBasket()
+{
+    if (gameState != GameState::PLAYING)
+    {
+        return;
+    }
+
+    if (mode != GameMode::HARD)
+    {
+        statusMessage = "Companion Basket is an exclusive feature for HARD mode!";
+        return;
+    }
+
+    if (companionBasket.active)
+    {
+        const int secsLeft = (companionBasket.ticksLeft / 33) + 1;
+        statusMessage = QString("Companion Basket is already active! (%1s remaining)").arg(secsLeft);
+        return;
+    }
+
+    if (growthEggCount < 2)
+    {
+        statusMessage = QString("Need 2 Growth Eggs to summon Companion Basket! (You have %1)").arg(growthEggCount);
+        return;
+    }
+
+    growthEggCount -= 2;
+    companionBasket.active = true;
+    companionBasket.ticksLeft = 165; // ~5.0 seconds at 30ms/tick
+    companionBasket.maxTicks = 165;
+    companionBasket.mathX = basket.mathX + (basket.mathX > 0 ? -16.0 : 16.0);
+    companionBasket.mathY = groundMathY + 1;
+    companionBasket.halfWidth = 6;
+    companionBasket.height = 7;
+    companionBasket.speed = 4.8;
+
+    spawnCatchParticles(companionBasket.mathX, companionBasket.mathY + 5, QColor(0, 229, 255), 32);
+    addFloatingText(companionBasket.mathX, groundMathY + 12.0, "🤖 COMPANION ACTIVE (5s)! 🤖", QColor(0, 229, 255));
+    statusMessage = "🤖 COMPANION BASKET SUMMONED! Catching eggs automatically for 5 seconds!";
+    triggerSound(SoundId::COMPANION_SPAWN);
+}
+
+const FallingEgg& GameEngine::getFallingEgg() const
+{
+    static const FallingEgg dummy{};
+    for (const auto &egg : fallingEggs)
+    {
+        if (egg.active)
+        {
+            return egg;
+        }
+    }
+    return dummy;
+}
+
+double GameEngine::getDayNightProgress() const
+{
+    return static_cast<double>(dayNightTick % DAY_NIGHT_CYCLE_TICKS) / DAY_NIGHT_CYCLE_TICKS;
+}
+
+double GameEngine::getNightDurationRatio() const
+{
+    if (mode == GameMode::EASY)
+    {
+        return 0.18;
+    }
+    else if (mode == GameMode::MEDIUM)
+    {
+        return 0.28;
+    }
+    else
+    {
+        return 0.42;
+    }
 }
 
 void GameEngine::togglePause()
@@ -70,7 +222,7 @@ void GameEngine::togglePause()
     else if (gameState == GameState::PLAYING)
     {
         gameState = GameState::PAUSED;
-        statusMessage = "Game Paused. Press Space / Right-Click / Left-Click to Resume.";
+        statusMessage = "Game Paused. Press ESC to Resume.";
     }
     else if (gameState == GameState::PAUSED)
     {
@@ -87,6 +239,7 @@ void GameEngine::tick(const MyGrid &grid)
     }
     else if (gameState == GameState::MENU)
     {
+        dayNightTick++;
         updateBirds(grid);
     }
 }
@@ -111,18 +264,15 @@ void GameEngine::setKeyRight(bool pressed)
 
 void GameEngine::handleMouseMove(int screenX)
 {
-    const int dx = std::abs(screenX - lastMouseX);
+    mouseScreenX = screenX;
     lastMouseX = screenX;
-    if (mouseControl || dx >= 3)
-    {
-        mouseScreenX = screenX;
-        mouseControl = true;
-    }
+    mouseControl = true;
 }
 
 void GameEngine::handleMouseLeftClick(int clickX)
 {
     mouseScreenX = clickX;
+    lastMouseX = clickX;
     mouseControl = true;
 
     if (gameState == GameState::PAUSED)
@@ -143,12 +293,24 @@ int GameEngine::levelForScore(int s) const
 
 double GameEngine::levelSpeedMultiplier() const
 {
-    // Noticeable and punchy speed progression:
-    // +15% speed boost per level for early levels (1 to 10),
-    // and +5% per level continuously up to level 50.
-    const double earlyBoost = std::min(static_cast<double>(level - 1), 10.0) * 0.15;
-    const double lateBoost = std::max(0.0, static_cast<double>(level - 11)) * 0.05;
-    return 1.0 + earlyBoost + lateBoost;
+    if (mode == GameMode::EASY)
+    {
+        const double earlyBoost = std::min(static_cast<double>(level - 1), 10.0) * 0.15;
+        const double lateBoost = std::max(0.0, static_cast<double>(level - 11)) * 0.05;
+        return 1.0 + earlyBoost + lateBoost;
+    }
+    else if (mode == GameMode::MEDIUM)
+    {
+        const double earlyBoost = std::min(static_cast<double>(level - 1), 10.0) * 0.20;
+        const double lateBoost = std::max(0.0, static_cast<double>(level - 11)) * 0.075;
+        return 1.0 + earlyBoost + lateBoost;
+    }
+    else
+    {
+        const double earlyBoost = std::min(static_cast<double>(level - 1), 10.0) * 0.25;
+        const double lateBoost = std::max(0.0, static_cast<double>(level - 11)) * 0.10;
+        return 1.0 + earlyBoost + lateBoost;
+    }
 }
 
 Bird GameEngine::createBird(size_t index, const MyGrid &grid)
@@ -161,8 +323,6 @@ Bird GameEngine::createBird(size_t index, const MyGrid &grid)
     const int topY = maxMathY - 11;
     const int bottomY = groundMathY + 20;
     const int availableSpan = std::max(30, topY - bottomY);
-    // Noticeably larger vertical spacing between birds (18 to 28 units):
-    // Lower birds fly significantly lower, leaving dramatically less time for the player
     const size_t anticipatedCount = std::max(size_t(2), birds.size() + 1);
     const int numGaps = std::max(1, static_cast<int>(anticipatedCount - 1));
     const int verticalSpacing = std::clamp(availableSpan / numGaps, 18, 28);
@@ -170,26 +330,18 @@ Bird GameEngine::createBird(size_t index, const MyGrid &grid)
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
 
     Bird b;
-    // Bird direction alternates: even indices start moving right, odd moving left
     b.direction = (index % 2 == 0) ? 1 : -1;
-
-    // Distribute birds across horizontal space so they don't start on top of each other
     const double offsetX = 18.0 + std::fmod(index * 29.0, std::max(20.0, screenSpan - 36.0));
     b.mathX = (b.direction > 0) ? (minMathX + offsetX) : (maxMathX - offsetX);
-
-    // Vertical spacing: lower bird index = higher altitude; each new bird is noticeably lower!
     b.mathY = std::max(bottomY, topY - static_cast<int>(index * verticalSpacing));
 
-    // Balanced, varying base speeds
     const double baseSpeeds[] = { 340.0, 420.0, 280.0, 380.0, 310.0, 450.0, 360.0, 300.0, 400.0, 330.0 };
     const double divisor = baseSpeeds[index % 10];
     b.speed = std::clamp(screenSpan / divisor, 0.35, 1.4);
 
-    // Stagger wing animation phase
     b.wingFrame = static_cast<int>(index % 3);
     b.wingTick = static_cast<int>((index * 2) % 5);
 
-    // Distinctive pixel plumage palette for flock variety
     struct Plumage { QColor body; QColor wing; QColor belly; };
     static const Plumage flockPlumage[] = {
         { QColor(52, 152, 219), QColor(27, 79, 114),  QColor(243, 156, 18) },  // 0: Bluebird
@@ -213,13 +365,12 @@ Bird GameEngine::createBird(size_t index, const MyGrid &grid)
 
 void GameEngine::applyLevelSettings(const MyGrid &grid)
 {
-    // Basket starts at starting width (halfWidth = 9) and shrinks with each level down to min 2
     basket.halfWidth = std::max(2, 9 - (level - 1));
     basket.height = 7;
 
-    // Start with 1 bird; after every 5 levels, increase bird count by 1:
-    // Level 1-5: 1 bird, Level 6-10: 2 birds, Level 11-15: 3 birds, ... up to 10 birds at Level 46-50.
-    const size_t targetBirdCount = static_cast<size_t>(1 + (level - 1) / 5);
+    // For Med and Hard mode, start with TWO birds! Easy starts with 1.
+    const size_t baseBirds = (mode == GameMode::EASY ? 1 : 2);
+    const size_t targetBirdCount = static_cast<size_t>(baseBirds + (level - 1) / 5);
     while (birds.size() < targetBirdCount)
     {
         birds.push_back(createBird(birds.size(), grid));
@@ -241,37 +392,226 @@ void GameEngine::checkLevelUp(const MyGrid &grid)
     const int levelsGained = newLevel - level;
     level = newLevel;
 
-    const int oldHalfWidth = basket.halfWidth;
-    // The basket gets smaller with each level!
     basket.halfWidth = std::max(2, basket.halfWidth - levelsGained);
     levelBannerTicks = 60; // ~1.8s banner
 
     const double rimY = basket.mathY + basket.height;
     spawnCatchParticles(basket.mathX, rimY, QColor(199, 125, 255), 30);
-    addFloatingText(basket.mathX, rimY + 8.0, QString("LEVEL %1!").arg(level), QColor(199, 125, 255));
+    statusMessage = QString("🎉 LEVEL UP! Welcome to Level %1!").arg(level);
+    triggerSound(SoundId::LEVEL_UP);
 
-    // Increase number of birds by one after each 5 levels
-    const size_t targetBirdCount = static_cast<size_t>(1 + (level - 1) / 5);
-    const size_t oldBirdCount = birds.size();
-    while (birds.size() < targetBirdCount)
+    applyLevelSettings(grid);
+}
+
+void GameEngine::updateThunderstormStrike(const MyGrid &grid)
+{
+    if (!thunderstormActive)
     {
-        birds.push_back(createBird(birds.size(), grid));
+        lightningStrikeState = 0;
+        return;
     }
-    const bool newBirdAdded = (birds.size() > oldBirdCount);
 
-    const bool shrank = basket.halfWidth < oldHalfWidth;
-    if (newBirdAdded)
+    const int frameW = grid.getWidth();
+    const int minMathX = grid.screenToMathX(0);
+    const int maxMathX = grid.screenToMathX(frameW);
+
+    // Trigger thunder strike around middle of the 10-second storm (~tick 165)
+    if (lightningStrikeState == 0 && thunderstormTicks == 165)
     {
-        addFloatingText(basket.mathX, rimY + 14.0, "+1 NEW BIRD!", QColor(255, 215, 0));
-        statusMessage = QString("🚀 LEVEL %1! A new lower-altitude bird joined the flock!%2")
-                            .arg(level)
-                            .arg(shrank ? " Basket shrunk!" : "");
+        lightningStrikeState = 1; // Warning ionization sizzle
+        lightningStrikeTimer = 26; // ~0.8s warning
+        std::uniform_real_distribution<double> offsetDist(-10.0, 10.0);
+        lightningStrikeX = std::clamp(basket.mathX + offsetDist(rng),
+                                      minMathX + basket.halfWidth + 4.0,
+                                      maxMathX - basket.halfWidth - 4.0);
+        statusMessage = "⚡ DANGER! Static ionization detected on ground! DODGE!";
+        addFloatingText(lightningStrikeX, groundMathY + 8.0, "⚡ DANGER! ⚡", QColor(255, 235, 59));
+    }
+    else if (lightningStrikeState == 1)
+    {
+        lightningStrikeTimer--;
+
+        // Crackling electric ground sparks at strike location
+        if (lightningStrikeTimer % 3 == 0)
+        {
+            GameParticle p;
+            p.x = lightningStrikeX + ((rng() % 8) - 4);
+            p.y = groundMathY + 1 + (rng() % 3);
+            p.vx = ((rng() % 10) - 5) * 0.05;
+            p.vy = 0.4 + (rng() % 10) * 0.04;
+            p.color = (rng() % 2 == 0) ? QColor(0, 229, 255) : QColor(255, 235, 59);
+            p.life = 12;
+            p.maxLife = 12;
+            particles.push_back(p);
+        }
+
+        if (lightningStrikeTimer <= 0)
+        {
+            // THUNDER IMPACT!
+            lightningStrikeState = 2; // Striking bolt
+            lightningStrikeTimer = 8;
+            lightningFlashTicks = 5; // Blinding screen flash
+            triggerSound(SoundId::THUNDER);
+
+            spawnExplosionParticles(lightningStrikeX, groundMathY + 2.0);
+
+            // Check hit on Basket
+            const double delta = std::abs(basket.mathX - lightningStrikeX);
+            if (delta <= basket.halfWidth + 2.5)
+            {
+                // Basket was hit by thunder strike!
+                // Player can revive ONLY if they have all three hearts left!
+                if (hearts == 3)
+                {
+                    // Revives!
+                    hearts = 1;
+                    lightningShockTimer = 7 * 33; // 231 ticks = 7 seconds
+                    spawnCatchParticles(basket.mathX, basket.mathY + 5.0, QColor(0, 229, 255), 40);
+                    addFloatingText(basket.mathX, basket.mathY + 6.0, "REVIVED! (SHOCKED 7s)", QColor(255, 235, 59));
+                    statusMessage = "⚡ STRUCK BY LIGHTNING! Revived with 3 hearts! Basket shocked & slowed for 7s!";
+                    triggerSound(SoundId::SHOCK);
+                }
+                else
+                {
+                    // Fatal strike!
+                    hearts = 0;
+                    gameOverReason = "Struck by lightning! (Need all 3 hearts to revive).";
+                    gameState = GameState::GAME_OVER;
+                    statusMessage = "⚡ Game Over! Struck by lightning without all 3 hearts to survive!";
+                    triggerSound(SoundId::GAME_OVER);
+                }
+            }
+            else
+            {
+                // Dodged!
+                addFloatingText(lightningStrikeX, groundMathY + 4.0, "LIGHTNING DODGED! ⚡", QColor(0, 229, 255));
+                statusMessage = "⚡ THUNDER STRIKE! You narrowly dodged the lethal lightning bolt!";
+            }
+        }
+    }
+    else if (lightningStrikeState == 2)
+    {
+        lightningStrikeTimer--;
+        if (lightningStrikeTimer <= 0)
+        {
+            lightningStrikeState = 0;
+        }
+    }
+}
+
+void GameEngine::updateWeather()
+{
+    if (thunderstormActive)
+    {
+        thunderstormTicks--;
+        if (thunderstormTicks <= 0)
+        {
+            thunderstormActive = false;
+            statusMessage = "The thunderstorm has cleared! Skies are returning to calm.";
+        }
+
+        // Falling slanted rain particles during thunderstorm
+        for (int r = 0; r < 5; ++r)
+        {
+            GameParticle p;
+            p.x = basket.mathX + ((rng() % 180) - 90);
+            p.y = groundMathY + 45 + (rng() % 25);
+            p.vx = -0.55;
+            p.vy = -1.95;
+            p.color = QColor(180, 215, 255, 175);
+            p.life = 28;
+            p.maxLife = 28;
+            particles.push_back(p);
+        }
+
+        if (lightningFlashTicks > 0)
+        {
+            lightningFlashTicks--;
+        }
     }
     else
     {
-        statusMessage = QString("🚀 LEVEL %1! Eggs fall faster%2")
-                            .arg(level)
-                            .arg(shrank ? " and your basket got smaller!" : "!");
+        if (lightningFlashTicks > 0)
+        {
+            lightningFlashTicks--;
+        }
+
+        thunderstormCooldown--;
+        if (thunderstormCooldown <= 0)
+        {
+            // Rare thunderstorm: cooldown 90-150s
+            thunderstormCooldown = 2800 + (rng() % 1800);
+            int triggerChance = 4; // Easy: rare 4%
+            if (mode == GameMode::MEDIUM)
+            {
+                triggerChance = 8; // Medium: 8%
+            }
+            else if (mode == GameMode::HARD)
+            {
+                triggerChance = 15; // Hard: 15%
+            }
+
+            if (static_cast<int>(rng() % 100) < triggerChance)
+            {
+                thunderstormActive = true;
+                thunderstormTicks = 330; // exactly 10 seconds!
+                statusMessage = "⚡ THUNDERSTORM! Pouring rain and lightning! Birds have fled to the clouds!";
+                addFloatingText(basket.mathX, groundMathY + 28.0, "⚡ THUNDERSTORM (10s)! ⚡", QColor(255, 235, 59));
+            }
+        }
+    }
+}
+
+void GameEngine::updateCompanionBasket(const MyGrid &grid)
+{
+    if (!companionBasket.active)
+    {
+        return;
+    }
+
+    const int frameW = grid.getWidth();
+    const int minMathX = grid.screenToMathX(0);
+    const int maxMathX = grid.screenToMathX(frameW);
+
+    companionBasket.ticksLeft--;
+    if (companionBasket.ticksLeft <= 0)
+    {
+        companionBasket.active = false;
+        statusMessage = "Companion Basket has expired.";
+        return;
+    }
+
+    double targetX = basket.mathX;
+    bool foundTarget = false;
+    double lowestY = 99999.0;
+
+    for (const auto &egg : fallingEggs)
+    {
+        if (egg.active && egg.type != EggType::BIRD_POOP)
+        {
+            if (egg.mathY < lowestY)
+            {
+                lowestY = egg.mathY;
+                targetX = egg.mathX;
+                foundTarget = true;
+            }
+        }
+    }
+
+    if (!foundTarget)
+    {
+        targetX = basket.mathX + (basket.mathX > 0 ? -15.0 : 15.0);
+    }
+
+    const double deltaX = targetX - companionBasket.mathX;
+    const double step = std::clamp(deltaX, -companionBasket.speed, companionBasket.speed);
+    companionBasket.mathX += step;
+
+    const double minCompX = static_cast<double>(minMathX);
+    const double maxCompX = static_cast<double>(maxMathX);
+    if (minCompX < maxCompX)
+    {
+        companionBasket.mathX = std::clamp(companionBasket.mathX, minCompX, maxCompX);
     }
 }
 
@@ -286,30 +626,102 @@ void GameEngine::updatePhysics(const MyGrid &grid)
     groundMathY = minMathY + 9;
     basket.mathY = groundMathY + 1;
 
+    dayNightTick++;
+
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
-    basket.speed = std::clamp(screenSpan / 70.0, 1.8, 5.5);
+    double effectiveSpeed = std::clamp(screenSpan / 70.0, 1.8, 5.5);
+
+    // Update Sticky Puddles from Bird Poop
+    bool inStickyZone = false;
+    for (size_t i = 0; i < stickyPuddles.size(); )
+    {
+        stickyPuddles[i].lifeTicks--;
+        if (stickyPuddles[i].lifeTicks <= 0)
+        {
+            stickyPuddles[i] = stickyPuddles.back();
+            stickyPuddles.pop_back();
+        }
+        else
+        {
+            const double dist = std::abs(basket.mathX - stickyPuddles[i].mathX);
+            if (dist <= basket.halfWidth + stickyPuddles[i].radius)
+            {
+                inStickyZone = true;
+            }
+            ++i;
+        }
+    }
+
+    if (inStickyZone)
+    {
+        effectiveSpeed *= 0.45;
+        if (dayNightTick % 6 == 0)
+        {
+            GameParticle p;
+            p.x = basket.mathX + ((rng() % 10) - 5);
+            p.y = basket.mathY + 1;
+            p.vx = ((rng() % 6) - 3) * 0.05;
+            p.vy = 0.15;
+            p.color = QColor(109, 76, 65, 200);
+            p.life = 10;
+            p.maxLife = 10;
+            particles.push_back(p);
+        }
+    }
+
+    // After revival from lightning, basket is slower for 7 seconds!
+    if (lightningShockTimer > 0)
+    {
+        lightningShockTimer--;
+        effectiveSpeed *= 0.50; // 50% speed penalty for 7 seconds!
+        if (dayNightTick % 4 == 0)
+        {
+            GameParticle p;
+            p.x = basket.mathX + ((rng() % (basket.halfWidth * 2 + 1)) - basket.halfWidth);
+            p.y = basket.mathY + (rng() % (basket.height + 1));
+            p.vx = ((rng() % 10) - 5) * 0.04;
+            p.vy = 0.20;
+            p.color = (rng() % 2 == 0) ? QColor(0, 229, 255) : QColor(255, 235, 59);
+            p.life = 8;
+            p.maxLife = 8;
+            particles.push_back(p);
+        }
+    }
+
+    basket.speed = effectiveSpeed;
 
     if (levelBannerTicks > 0)
     {
         levelBannerTicks--;
     }
 
-    // 1. Update Birds
+    updateWeather();
+    updateThunderstormStrike(grid);
     updateBirds(grid);
-
-    // 1b. Update Special Legendary Bird
     updateLegendaryBird(grid);
-
-    // 2. Spawn and update Falling Egg
+    updateCompanionBasket(grid);
     updateEggSpawn(grid);
-    updateFallingEgg(grid);
+    updateFallingEggs(grid);
 
-    // 3. Move Basket via Keyboard or Mouse
+    // Move Player Basket via Keyboard or Mouse
+    const double minBasketX = static_cast<double>(minMathX);
+    const double maxBasketX = static_cast<double>(maxMathX);
+
     if (mouseControl)
     {
-        const double targetX = grid.screenToMathX(mouseScreenX);
-        const double maxStep = basket.speed * 2.2;
-        basket.mathX += std::clamp(targetX - basket.mathX, -maxStep, maxStep);
+        const double norm = std::clamp(static_cast<double>(mouseScreenX) / std::max(1, frameW - 1), 0.0, 1.0);
+        const double targetX = minBasketX + norm * (maxBasketX - minBasketX);
+        if (inStickyZone || lightningShockTimer > 0)
+        {
+            // Speed penalty active: smooth chase with penalty speed
+            const double maxStep = basket.speed * 1.5;
+            basket.mathX += std::clamp(targetX - basket.mathX, -maxStep, maxStep);
+        }
+        else
+        {
+            // Crisp, direct, responsive 1:1 mouse tracking
+            basket.mathX = targetX;
+        }
     }
     else
     {
@@ -323,14 +735,11 @@ void GameEngine::updatePhysics(const MyGrid &grid)
         }
     }
 
-    const double minBasketX = minMathX + basket.halfWidth + 1.0;
-    const double maxBasketX = maxMathX - basket.halfWidth - 1.0;
     if (minBasketX < maxBasketX)
     {
         basket.mathX = std::clamp(basket.mathX, minBasketX, maxBasketX);
     }
 
-    // 4. Update Particle Effects
     updateParticles();
 }
 
@@ -344,8 +753,6 @@ void GameEngine::updateBirds(const MyGrid &grid)
     const int topY = maxMathY - 11;
     const int bottomY = groundMathY + 20;
     const int availableSpan = std::max(30, topY - bottomY);
-    // Noticeably larger vertical spacing between birds (18 to 28 units):
-    // Gives lower birds much lower altitude and the player significantly less time
     const int numGaps = std::max(1, static_cast<int>(birds.size() - 1));
     const int verticalSpacing = (birds.size() <= 1) ? 0 : std::clamp(availableSpan / numGaps, 18, 28);
 
@@ -353,8 +760,21 @@ void GameEngine::updateBirds(const MyGrid &grid)
     {
         Bird &bird = birds[i];
 
-        const int targetY = std::max(bottomY, topY - static_cast<int>(i * verticalSpacing));
-        bird.mathY = targetY;
+        // While thunderstorm, birds retreat into the shelter of high storm clouds!
+        int targetY;
+        if (thunderstormActive)
+        {
+            targetY = maxMathY - 10 - static_cast<int>(i % 3);
+            bird.isLaying = false; // Birds don't lay eggs while sheltering in the storm!
+        }
+        else
+        {
+            targetY = std::max(bottomY, topY - static_cast<int>(i * verticalSpacing));
+        }
+
+        // Smooth flight toward targetY
+        if (bird.mathY < targetY) bird.mathY = std::min(static_cast<double>(targetY), bird.mathY + 0.6);
+        else if (bird.mathY > targetY) bird.mathY = std::max(static_cast<double>(targetY), bird.mathY - 0.6);
 
         bird.wingTick++;
         if (bird.wingTick >= 5)
@@ -363,53 +783,21 @@ void GameEngine::updateBirds(const MyGrid &grid)
             bird.wingFrame = (bird.wingFrame + 1) % 3;
         }
 
-        if (bird.isLaying)
+        if (bird.isLaying && !thunderstormActive)
         {
             bird.layingCountdown--;
             bird.mathX += (bird.layingCountdown % 2 == 0 ? 0.25 : -0.25);
 
             if (bird.layingCountdown <= 0)
             {
-                fallingEgg.active = true;
-                fallingEgg.mathX = bird.mathX;
-                fallingEgg.mathY = bird.mathY - 3.0;
-                fallingEgg.type = bird.pendingEggType;
-                fallingEgg.animTick = 0;
-
-                const int totalHeight = std::max(30, maxMathY - groundMathY);
-                const double speedMul = levelSpeedMultiplier();
-                // Initial drop velocity scales with level for instant noticeable speed
-                fallingEgg.vy = 0.12 * speedMul;
-                fallingEgg.gravity = (0.012 + (totalHeight / 6500.0)) * speedMul;
-                fallingEgg.maxSpeed = (1.5 + (totalHeight / 70.0)) * speedMul;
-
+                spawnEggFromBird(bird, grid, bird.pendingEggType);
                 bird.isLaying = false;
-
-                if (fallingEgg.type == EggType::GOLDEN)
-                {
-                    statusMessage = "✨ A bird laid a SPECIAL GOLDEN EGG! Catch it for bonus points!";
-                }
-                else if (fallingEgg.type == EggType::BIRD_POOP)
-                {
-                    statusMessage = "💩 Watch out! A bird dropped POOP! Do NOT catch it in your basket!";
-                }
-                else if (fallingEgg.type == EggType::BASKET_GROW)
-                {
-                    statusMessage = "🌟 A rare GROWTH EGG is falling! Catch it to widen your basket!";
-                }
-                else if (fallingEgg.type == EggType::BASKET_RESTORE)
-                {
-                    statusMessage = "🌈 A LEGENDARY RESTORATION EGG is falling! Catch it to restore full basket size!";
-                }
-                else
-                {
-                    statusMessage = "An egg is falling! Catch it!";
-                }
             }
         }
         else
         {
-            bird.mathX += bird.direction * bird.speed * (1.0 + 0.05 * (level - 1));
+            const double modeSpeedBoost = (mode == GameMode::HARD ? 0.08 : (mode == GameMode::MEDIUM ? 0.06 : 0.04));
+            bird.mathX += bird.direction * bird.speed * (1.0 + modeSpeedBoost * (level - 1));
 
             if (bird.mathX > maxMathX - 10.0 && bird.direction > 0)
             {
@@ -423,16 +811,53 @@ void GameEngine::updateBirds(const MyGrid &grid)
     }
 }
 
+void GameEngine::spawnEggFromBird(Bird &bird, const MyGrid &grid, EggType eType)
+{
+    Q_UNUSED(grid);
+    const int maxMathY = groundMathY + 50;
+    const int totalHeight = std::max(30, maxMathY - groundMathY);
+    const double speedMul = levelSpeedMultiplier();
+
+    FallingEgg newEgg;
+    newEgg.active = true;
+    newEgg.mathX = bird.mathX;
+    newEgg.mathY = bird.mathY - 3.0;
+    newEgg.type = eType;
+    newEgg.animTick = 0;
+    newEgg.vy = 0.12 * speedMul;
+    newEgg.gravity = (0.012 + (totalHeight / 6500.0)) * speedMul;
+    newEgg.maxSpeed = (1.5 + (totalHeight / 70.0)) * speedMul;
+
+    fallingEggs.push_back(newEgg);
+
+    if (eType == EggType::GOLDEN)
+    {
+        statusMessage = "✨ A bird laid a SPECIAL GOLDEN EGG! Catch it for bonus points!";
+    }
+    else if (eType == EggType::BIRD_POOP)
+    {
+        statusMessage = "💩 Watch out! A bird dropped POOP! Do NOT catch it in your basket!";
+    }
+    else if (eType == EggType::BASKET_GROW)
+    {
+        statusMessage = "🌟 A rare GROWTH EGG is falling! Catch it to store in inventory (Press H)!";
+    }
+    else if (eType == EggType::BASKET_RESTORE)
+    {
+        statusMessage = "🌈 A LEGENDARY RESTORATION EGG is falling! Catch it to restore full basket size!";
+    }
+    else
+    {
+        statusMessage = "An egg is falling! Catch it!";
+    }
+}
+
 void GameEngine::spawnLegendaryBird(const MyGrid &grid)
 {
     const int frameW = std::max(grid.getWidth(), 640);
     const int minMathX = grid.screenToMathX(0);
     const int maxMathX = grid.screenToMathX(frameW);
     const int maxMathY = grid.screenToMathY(0);
-
-    // Guaranteed safe minimum height so it is feasible to catch that egg:
-    // Basket rim is at groundMathY + 8.
-    // minBirdY is groundMathY + 28, leaving at least 20 units of fall distance!
     const int minBirdY = groundMathY + 28;
     const int maxBirdY = maxMathY - 12;
 
@@ -440,68 +865,69 @@ void GameEngine::spawnLegendaryBird(const MyGrid &grid)
     legendaryEggDropped = false;
     legendaryAnimTick = 0;
 
-    // Pick entry direction: 0 = enters from left, 1 = enters from right
     std::uniform_int_distribution<int> dirDist(0, 1);
     const int dirChoice = dirDist(rng);
     const int dir = (dirChoice == 0) ? 1 : -1;
 
-    // Pick surprise path type: 0 = SINE_WAVE, 1 = SWOOP_ARC, 2 = DIAGONAL_GLIDE, 3 = HORIZONTAL_SURGE
     std::uniform_int_distribution<int> pathDist(0, 3);
     legendaryPathType = pathDist(rng);
 
-    // Spawn X position: off-screen
-    legendaryStartX = (dir > 0) ? (minMathX - 22.0) : (maxMathX + 22.0);
-    legendaryBird.mathX = legendaryStartX;
-    legendaryBird.direction = dir;
-    legendaryBird.isLegendary = true;
-    legendaryBird.isLaying = false;
-    legendaryBird.layingCountdown = 0;
-    legendaryBird.pendingEggType = EggType::BASKET_RESTORE;
-
-    // Starting height: randomized across the safe height span
-    std::uniform_real_distribution<double> yDist(minBirdY + 6.0, maxBirdY);
+    std::uniform_real_distribution<double> yDist(minBirdY, maxBirdY);
     legendaryStartY = yDist(rng);
     legendaryBaseY = legendaryStartY;
+
+    legendaryBird.bodyColor = QColor(255, 140, 0);
+    legendaryBird.wingColor = QColor(229, 57, 53);
+    legendaryBird.bellyColor = QColor(255, 238, 88);
+    legendaryBird.direction = dir;
+    legendaryBird.wingFrame = 0;
+    legendaryBird.wingTick = 0;
+    legendaryBird.isLaying = false;
+
+    if (dir > 0)
+    {
+        legendaryStartX = minMathX - 22.0;
+    }
+    else
+    {
+        legendaryStartX = maxMathX + 22.0;
+    }
+    legendaryBird.mathX = legendaryStartX;
     legendaryBird.mathY = legendaryStartY;
 
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
-    std::uniform_real_distribution<double> spdDist(screenSpan / 280.0, screenSpan / 210.0);
-    legendarySpeedX = dir * std::clamp(spdDist(rng), 0.65, 1.4);
+    std::uniform_real_distribution<double> spdDist(screenSpan / 280.0, screenSpan / 190.0);
+    legendarySpeedX = spdDist(rng) * dir;
 
     if (legendaryPathType == 0)
     {
-        // SINE WAVE: undulating crests and troughs
-        std::uniform_real_distribution<double> ampDist(6.0, 12.0);
+        std::uniform_real_distribution<double> ampDist(7.0, 14.0);
         legendaryAmplitude = ampDist(rng);
-        std::uniform_real_distribution<double> freqDist(0.06, 0.10);
-        legendaryFrequency = freqDist(rng);
+        legendaryFrequency = 0.045 + (rng() % 30) * 0.001;
     }
     else if (legendaryPathType == 1)
     {
-        // SWOOP ARC: parabolic dive down and swoop back up
-        std::uniform_real_distribution<double> ampDist(10.0, 16.0);
+        std::uniform_real_distribution<double> ampDist(12.0, 18.0);
         legendaryAmplitude = ampDist(rng);
+        legendaryFrequency = 3.14159 / screenSpan;
     }
     else if (legendaryPathType == 2)
     {
-        // DIAGONAL GLIDE with harmonic wave
-        std::uniform_real_distribution<double> slopeDist(-0.20, 0.20);
+        std::uniform_real_distribution<double> slopeDist(-0.18, 0.18);
         legendarySpeedY = slopeDist(rng);
     }
     else
     {
-        // HORIZONTAL SURGE
         legendaryAmplitude = 3.0;
         legendaryFrequency = 0.08;
     }
 
-    // Target egg drop X coordinate: within comfortable center 60% of the screen
     std::uniform_real_distribution<double> dropXDist(minMathX + screenSpan * 0.25, minMathX + screenSpan * 0.75);
     legendaryDropX = dropXDist(rng);
 
     lastRestoreEggLevel = level;
-    statusMessage = "✨ SURPRISE! A MYTHICAL PHOENIX HAS ENTERED THE SKY! Catch its legendary egg!";
-    addFloatingText((minMathX + maxMathX) / 2.0, maxMathY - 14.0, "✨ MYTHICAL PHOENIX! ✨", QColor(0, 229, 255));
+    statusMessage = "🔥 SURPRISE! A MAJESTIC FIRE PHOENIX HAS ENTERED THE SKY! Catch its legendary egg!";
+    addFloatingText((minMathX + maxMathX) / 2.0, maxMathY - 14.0, "🔥 FIRE PHOENIX! 🔥", QColor(255, 140, 0));
 }
 
 void GameEngine::updateLegendaryBird(const MyGrid &grid)
@@ -528,111 +954,97 @@ void GameEngine::updateLegendaryBird(const MyGrid &grid)
         legendaryBird.wingFrame = (legendaryBird.wingFrame + 1) % 3;
     }
 
-    // Trailing prismatic stardust particles
     if (legendaryAnimTick % 2 == 0)
     {
-        static const QColor starCols[] = {
-            QColor(0, 229, 255),
+        static const QColor emberCols[] = {
+            QColor(255, 254, 235),
             QColor(255, 215, 0),
-            QColor(233, 30, 99),
-            QColor(255, 255, 255),
-            QColor(156, 39, 176)
+            QColor(255, 112, 67),
+            QColor(229, 57, 53),
+            QColor(255, 160, 0)
         };
         GameParticle p;
         p.x = legendaryBird.mathX - legendaryBird.direction * 10.0;
         p.y = legendaryBird.mathY + (legendaryAnimTick % 3 - 1);
         p.vx = -legendaryBird.direction * 0.28;
-        p.vy = ((rng() % 10) - 5) * 0.04;
-        p.color = starCols[rng() % 5];
+        p.vy = 0.08 + ((rng() % 10) - 3) * 0.03;
+        p.color = emberCols[rng() % 5];
         p.life = 14;
         p.maxLife = 14;
         particles.push_back(p);
     }
 
-    // 1. Move along curved/surprise path
     legendaryBird.mathX += legendarySpeedX;
-
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
 
     if (legendaryPathType == 0)
     {
-        // SINE WAVE
         legendaryBird.mathY = legendaryBaseY + legendaryAmplitude * std::sin((legendaryBird.mathX - legendaryStartX) * legendaryFrequency);
     }
     else if (legendaryPathType == 1)
     {
-        // SWOOP ARC: parabolic dip near screen center
-        const double midX = (minMathX + maxMathX) / 2.0;
-        const double normDist = (legendaryBird.mathX - midX) / (screenSpan * 0.5);
-        legendaryBird.mathY = legendaryBaseY - legendaryAmplitude * (1.0 - std::min(1.0, normDist * normDist));
+        const double progress = std::clamp(std::abs(legendaryBird.mathX - legendaryStartX) / screenSpan, 0.0, 1.0);
+        legendaryBird.mathY = legendaryBaseY - legendaryAmplitude * std::sin(progress * 3.14159);
     }
     else if (legendaryPathType == 2)
     {
-        // DIAGONAL GLIDE with harmonic wave
-        legendaryBird.mathY += legendarySpeedY + 0.4 * std::sin(legendaryAnimTick * 0.1);
+        legendaryBird.mathY += legendarySpeedY;
     }
     else
     {
-        // HORIZONTAL SURGE with subtle floating bob
-        legendaryBird.mathY = legendaryBaseY + legendaryAmplitude * std::sin(legendaryAnimTick * 0.08);
+        legendaryBird.mathY = legendaryBaseY + legendaryAmplitude * std::sin(legendaryAnimTick * legendaryFrequency);
     }
 
-    // Keep within feasible catching altitude
     legendaryBird.mathY = std::clamp(legendaryBird.mathY, static_cast<double>(minBirdY), static_cast<double>(maxBirdY));
 
-    // 2. Trigger laying when reaching drop position
-    if (!legendaryEggDropped && !fallingEgg.active)
+    if (!legendaryEggDropped)
     {
-        const bool reachedDropX = (legendaryBird.direction > 0)
-                                      ? (legendaryBird.mathX >= legendaryDropX)
-                                      : (legendaryBird.mathX <= legendaryDropX);
-
-        if (reachedDropX && !legendaryBird.isLaying)
+        const bool reachedDropZone = (legendaryBird.direction > 0 && legendaryBird.mathX >= legendaryDropX) ||
+                                     (legendaryBird.direction < 0 && legendaryBird.mathX <= legendaryDropX);
+        if (reachedDropZone)
         {
+            legendaryEggDropped = true;
             legendaryBird.isLaying = true;
-            legendaryBird.layingCountdown = 16;
-        }
 
-        if (legendaryBird.isLaying)
-        {
-            legendaryBird.layingCountdown--;
-            if (legendaryBird.layingCountdown <= 0)
-            {
-                // Drop the Legendary Restoration Egg!
-                fallingEgg.active = true;
-                fallingEgg.mathX = legendaryBird.mathX;
-                fallingEgg.mathY = legendaryBird.mathY - 3.0;
-                fallingEgg.type = EggType::BASKET_RESTORE;
-                fallingEgg.animTick = 0;
+            const int totalHeight = std::max(30, maxMathY - groundMathY);
+            const double speedMul = levelSpeedMultiplier();
 
-                const int totalHeight = std::max(30, maxMathY - groundMathY);
-                const double speedMul = levelSpeedMultiplier();
-                fallingEgg.vy = 0.10 * speedMul;
-                fallingEgg.gravity = (0.012 + (totalHeight / 6500.0)) * speedMul;
-                fallingEgg.maxSpeed = (1.5 + (totalHeight / 70.0)) * speedMul;
+            FallingEgg newEgg;
+            newEgg.active = true;
+            newEgg.mathX = legendaryBird.mathX;
+            newEgg.mathY = legendaryBird.mathY - 3.0;
+            newEgg.type = EggType::BASKET_RESTORE;
+            newEgg.animTick = 0;
+            newEgg.vy = 0.10 * speedMul;
+            newEgg.gravity = (0.012 + (totalHeight / 6500.0)) * speedMul;
+            newEgg.maxSpeed = (1.5 + (totalHeight / 70.0)) * speedMul;
+            fallingEggs.push_back(newEgg);
 
-                legendaryEggDropped = true;
-                legendaryBird.isLaying = false;
-
-                statusMessage = "🌈 A LEGENDARY RESTORATION EGG is falling! Catch it to restore full basket size!";
-                addFloatingText(legendaryBird.mathX, legendaryBird.mathY + 5.0, "🌈 LEGENDARY EGG! 🌈", QColor(0, 229, 255));
-                spawnCatchParticles(legendaryBird.mathX, legendaryBird.mathY, QColor(0, 229, 255), 28);
-            }
+            statusMessage = "🌈 THE PHOENIX DROPPED THE LEGENDARY RESTORATION EGG! Catch it!";
+            addFloatingText(legendaryBird.mathX, legendaryBird.mathY + 4.0, "🌈 LEGENDARY EGG! 🌈", QColor(0, 229, 255));
         }
     }
 
-    // 3. Disappear after exiting screen boundaries
-    const bool exitedScreen = (legendaryBird.direction > 0 && legendaryBird.mathX > maxMathX + 24.0) ||
-                             (legendaryBird.direction < 0 && legendaryBird.mathX < minMathX - 24.0);
-    if (exitedScreen)
+    const bool exited = (legendaryBird.direction > 0 && legendaryBird.mathX > maxMathX + 35.0) ||
+                        (legendaryBird.direction < 0 && legendaryBird.mathX < minMathX - 35.0);
+    if (exited)
     {
         legendaryBirdActive = false;
-        legendaryBird.isLaying = false;
     }
 }
 
 void GameEngine::updateEggSpawn(const MyGrid &grid)
 {
+    // If thunderstorm is currently active, birds hide and do not lay eggs!
+    if (thunderstormActive)
+    {
+        return;
+    }
+
+    const int frameW = grid.getWidth();
+    const int minMathX = grid.screenToMathX(0);
+    const int maxMathX = grid.screenToMathX(frameW);
+
     bool anyBirdLaying = false;
     for (const auto &b : birds)
     {
@@ -642,35 +1054,36 @@ void GameEngine::updateEggSpawn(const MyGrid &grid)
             break;
         }
     }
-    if (legendaryBirdActive && legendaryBird.isLaying)
+
+    bool canSpawn = (fallingEggs.empty() && !anyBirdLaying);
+    if (mode == GameMode::HARD && fallingEggs.size() < 2 && !anyBirdLaying)
     {
-        anyBirdLaying = true;
+        canSpawn = true;
     }
 
-    if (!fallingEgg.active && !anyBirdLaying)
+    if (canSpawn)
     {
+        if (dualDropCooldownTicks > 0)
+        {
+            dualDropCooldownTicks--;
+        }
+
         eggSpawnCooldown--;
         if (eggSpawnCooldown <= 0)
         {
-            const int frameW = grid.getWidth();
-            const int minMathX = grid.screenToMathX(0);
-            const int maxMathX = grid.screenToMathX(frameW);
-
-            // Very rare Legendary Basket Restore Egg:
-            // Spawns a Special Surprise Phoenix exclusively to fly a surprise curved path and lay the egg!
             const bool restoreDue = (level >= 10 && (level - lastRestoreEggLevel >= 10) && basket.halfWidth < 9);
             if (restoreDue && !legendaryBirdActive)
             {
+                int restoreChance = (mode == GameMode::HARD ? 18 : (mode == GameMode::MEDIUM ? 25 : 35));
                 std::uniform_int_distribution<int> restoreRollDist(0, 99);
-                if (restoreRollDist(rng) < 35)
+                if (restoreRollDist(rng) < restoreChance)
                 {
                     spawnLegendaryBird(grid);
                     eggSpawnCooldown = std::max(eggSpawnCooldown, 40);
-                    return; // The legendary bird handles laying the legendary egg!
+                    return;
                 }
             }
 
-            // If legendary bird is currently active and preparing to lay, let player focus on it
             if (legendaryBirdActive && !legendaryEggDropped)
             {
                 return;
@@ -687,192 +1100,336 @@ void GameEngine::updateEggSpawn(const MyGrid &grid)
 
             if (!validIndices.empty())
             {
-                std::uniform_int_distribution<size_t> birdDist(0, validIndices.size() - 1);
-                size_t chosenIdx = validIndices[birdDist(rng)];
-                Bird &chosenBird = birds[chosenIdx];
-
-                // Frequency of egg laying increases with every level, with extra boosts every 3 levels (tiers)
                 const int tier = (level - 1) / 3;
-                const double freqDrop = 0.055 * (level - 1) + 0.05 * tier;
-                const double freqFactor = std::max(0.15, 1.0 - freqDrop);
+                const double freqMultiplier = (mode == GameMode::HARD ? 1.4 : (mode == GameMode::MEDIUM ? 1.2 : 1.0));
+                const double freqDrop = (0.055 * (level - 1) + 0.05 * tier) * freqMultiplier;
+                const double freqFactor = std::max(0.12, 1.0 - freqDrop);
                 const int minCool = std::max(5, static_cast<int>(std::round(55 * freqFactor)));
                 const int maxCool = std::max(10, static_cast<int>(std::round(85 * freqFactor)));
                 std::uniform_int_distribution<int> cooldownDist(minCool, maxCool);
                 eggSpawnCooldown = cooldownDist(rng);
 
-                // Standard flock birds lay Growth, Golden, Regular eggs, or Bird Poop
-                EggType eType = EggType::REGULAR;
+                auto pickEggType = [this, tier]() -> EggType {
+                    const bool basketIsSmall = (basket.halfWidth <= 6);
+                    const bool growCooldownPassed = (lastGrowEggMissLevel == 0 || (level - lastGrowEggMissLevel >= 4));
+                    
+                    int growChance = (mode == GameMode::HARD ? 10 : (mode == GameMode::MEDIUM ? 18 : 22));
+                    int goldenPct = (mode == GameMode::HARD ? 10 : (mode == GameMode::MEDIUM ? 14 : 18));
+                    int poopPct = (mode == GameMode::HARD ? std::min(60, 28 + tier * 3)
+                                                         : (mode == GameMode::MEDIUM ? std::min(50, 20 + tier * 2)
+                                                                                     : std::min(45, 15 + tier * 2)));
 
-                // Rare Growth Egg: comes when basket has shrunk (halfWidth <= 6)
-                // and player has not missed a growth egg within the last 4 levels
-                const bool basketIsSmall = (basket.halfWidth <= 6);
-                const bool growCooldownPassed = (lastGrowEggMissLevel == 0 || (level - lastGrowEggMissLevel >= 4));
-                if (basketIsSmall && growCooldownPassed)
-                {
-                    std::uniform_int_distribution<int> growRollDist(0, 99);
-                    if (growRollDist(rng) < 22)
+                    if (basketIsSmall && growCooldownPassed)
                     {
-                        eType = EggType::BASKET_GROW;
+                        std::uniform_int_distribution<int> growRollDist(0, 99);
+                        if (growRollDist(rng) < growChance)
+                        {
+                            return EggType::BASKET_GROW;
+                        }
                     }
-                }
 
-                if (eType != EggType::BASKET_GROW)
-                {
-                    const int poopPct = std::min(45, 15 + static_cast<int>(tier * 2.0));
-                    const int goldenPct = 18;
-                    const int regularPct = 100 - goldenPct - poopPct;
+                    const int regularPct = std::max(10, 100 - goldenPct - poopPct);
                     std::uniform_int_distribution<int> typeDist(0, 99);
                     const int roll = typeDist(rng);
 
                     if (roll < regularPct)
                     {
-                        eType = EggType::REGULAR;
+                        return EggType::REGULAR;
                     }
                     else if (roll < regularPct + goldenPct)
                     {
-                        eType = EggType::GOLDEN;
+                        return EggType::GOLDEN;
                     }
                     else
                     {
-                        eType = EggType::BIRD_POOP;
+                        return EggType::BIRD_POOP;
                     }
-                }
+                };
 
-                chosenBird.isLaying = true;
-                chosenBird.layingCountdown = std::max(5, static_cast<int>(std::round(22 * freqFactor)));
-                chosenBird.pendingEggType = eType;
+                bool doDualDrop = (mode == GameMode::HARD && validIndices.size() >= 2 && dualDropCooldownTicks <= 0 && (rng() % 100 < 3));
+
+                if (doDualDrop)
+                {
+                    dualDropCooldownTicks = 1200 + (rng() % 800); // Rare cooldown: 36 - 60 seconds
+                    size_t idxA = validIndices[rng() % validIndices.size()];
+                    size_t idxB = idxA;
+                    for (int attempt = 0; attempt < 5 && idxB == idxA; ++attempt)
+                    {
+                        idxB = validIndices[rng() % validIndices.size()];
+                    }
+
+                    Bird &birdA = birds[idxA];
+                    birdA.isLaying = true;
+                    birdA.layingCountdown = std::max(4, static_cast<int>(std::round(18 * freqFactor)));
+                    birdA.pendingEggType = pickEggType();
+
+                    if (idxB != idxA)
+                    {
+                        Bird &birdB = birds[idxB];
+                        birdB.isLaying = true;
+                        birdB.layingCountdown = std::max(4, static_cast<int>(std::round(22 * freqFactor)));
+                        birdB.pendingEggType = pickEggType();
+                    }
+
+                    statusMessage = "⚠️ DUAL DROP ALERT! Two eggs are dropping simultaneously!";
+                    addFloatingText(basket.mathX, groundMathY + 24.0, "⚠️ DUAL DROP! ⚠️", QColor(255, 87, 34));
+                }
+                else
+                {
+                    std::uniform_int_distribution<size_t> birdDist(0, validIndices.size() - 1);
+                    size_t chosenIdx = validIndices[birdDist(rng)];
+                    Bird &chosenBird = birds[chosenIdx];
+
+                    chosenBird.isLaying = true;
+                    chosenBird.layingCountdown = std::max(5, static_cast<int>(std::round(22 * freqFactor)));
+                    chosenBird.pendingEggType = pickEggType();
+                }
             }
         }
     }
 }
 
-void GameEngine::updateFallingEgg(const MyGrid &grid)
+void GameEngine::updateFallingEggs(const MyGrid &grid)
 {
-    if (!fallingEgg.active)
-    {
-        return;
-    }
-
-    const double prevEggY = fallingEgg.mathY;
-    fallingEgg.vy = std::min(fallingEgg.maxSpeed, fallingEgg.vy + fallingEgg.gravity);
-    fallingEgg.mathY -= fallingEgg.vy;
-    fallingEgg.animTick++;
-
     const double rimY = basket.mathY + basket.height;
+    const double compRimY = companionBasket.mathY + companionBasket.height;
 
-    // 1. Swept Collision with Basket Rim
-    if (fallingEgg.mathY <= rimY + 0.6 && prevEggY >= basket.mathY)
+    for (size_t i = 0; i < fallingEggs.size(); )
     {
-        const double deltaX = std::abs(fallingEgg.mathX - basket.mathX);
-        if (deltaX <= basket.halfWidth + 0.8)
+        FallingEgg &egg = fallingEggs[i];
+        if (!egg.active)
         {
-            fallingEgg.active = false;
+            fallingEggs[i] = fallingEggs.back();
+            fallingEggs.pop_back();
+            continue;
+        }
 
-            if (fallingEgg.type == EggType::REGULAR)
+        const double prevEggY = egg.mathY;
+        egg.vy = std::min(egg.maxSpeed, egg.vy + egg.gravity);
+        egg.mathY -= egg.vy;
+        egg.animTick++;
+
+        if (thunderstormActive)
+        {
+            egg.mathX += ((egg.animTick % 4 < 2) ? -0.10 : 0.05);
+        }
+
+        bool handled = false;
+
+        // 1. Collision with Player Basket
+        if (egg.mathY <= rimY + 0.6 && prevEggY >= basket.mathY)
+        {
+            const double deltaX = std::abs(egg.mathX - basket.mathX);
+            if (deltaX <= basket.halfWidth + 0.8)
             {
-                score += 10;
-                highScore = std::max(highScore, score);
-                spawnCatchParticles(fallingEgg.mathX, rimY, QColor(255, 255, 230), 12);
-                addFloatingText(basket.mathX, rimY + 3.0, "+10", QColor(46, 204, 113));
-                statusMessage = "Caught Regular Egg! +10 pts";
+                egg.active = false;
+                handled = true;
+
+                if (egg.type == EggType::REGULAR)
+                {
+                    score += 10;
+                    highScore = std::max(highScore, score);
+                    spawnCatchParticles(egg.mathX, rimY, QColor(255, 255, 230), 12);
+                    addFloatingText(basket.mathX, rimY + 3.0, "+10", QColor(46, 204, 113));
+                    statusMessage = "Caught Regular Egg! +10 pts";
+                    triggerSound(SoundId::CATCH_REGULAR);
+                }
+                else if (egg.type == EggType::GOLDEN)
+                {
+                    score += 50;
+                    highScore = std::max(highScore, score);
+                    spawnCatchParticles(egg.mathX, rimY, QColor(255, 215, 0), 24);
+                    addFloatingText(basket.mathX, rimY + 3.0, "⭐ +50 BONUS! ⭐", QColor(255, 215, 0));
+                    statusMessage = "⭐ BONUS! Caught Golden Egg! +50 pts! ⭐";
+                    triggerSound(SoundId::CATCH_GOLDEN);
+                }
+                else if (egg.type == EggType::BASKET_GROW)
+                {
+                    score += 25;
+                    highScore = std::max(highScore, score);
+                    growthEggCount++; // Stored in inventory!
+                    lastGrowEggMissLevel = 0;
+                    spawnCatchParticles(egg.mathX, rimY, QColor(46, 204, 113), 26);
+                    addFloatingText(basket.mathX, rimY + 4.0, "+1 GROWTH EGG (Press H)", QColor(46, 204, 113));
+                    statusMessage = QString("🌟 Caught Growth Egg! Stored in inventory (%1 total). Press [H] to widen basket!").arg(growthEggCount);
+                    triggerSound(SoundId::CATCH_GROW);
+                }
+                else if (egg.type == EggType::BASKET_RESTORE)
+                {
+                    score += 100;
+                    highScore = std::max(highScore, score);
+                    basket.halfWidth = 9;
+                    spawnCatchParticles(egg.mathX, rimY, QColor(0, 229, 255), 36);
+                    addFloatingText(basket.mathX, rimY + 4.0, "🌈 FULL RECOVERY! +100 🌈", QColor(0, 229, 255));
+                    statusMessage = "🌈 LEGENDARY RECOVERY! Basket restored to full starting size! +100 pts";
+                    triggerSound(SoundId::CATCH_LEGENDARY);
+                }
+                else if (egg.type == EggType::BIRD_POOP)
+                {
+                    hearts--;
+                    spawnPoopSplashParticles(egg.mathX, rimY);
+                    addFloatingText(basket.mathX, rimY + 4.0, "YUCK! -1 ❤", QColor(231, 76, 60));
+
+                    if (hearts <= 0)
+                    {
+                        hearts = 0;
+                        gameOverReason = "Caught Bird Poop! Lost your final heart.";
+                        gameState = GameState::GAME_OVER;
+                        statusMessage = "💩 Game Over! Caught bird poop and lost your final heart!";
+                        triggerSound(SoundId::GAME_OVER);
+                    }
+                    else
+                    {
+                        statusMessage = QString("💩 Yuck! You caught bird poop! Lost 1 heart (%1 left).").arg(hearts);
+                        triggerSound(SoundId::POOP_HIT);
+                    }
+                }
+
+                if (gameState == GameState::PLAYING)
+                {
+                    checkLevelUp(grid);
+                }
             }
-            else if (fallingEgg.type == EggType::GOLDEN)
+        }
+
+        // 2. Collision with Companion Basket (Hard Mode)
+        if (!handled && companionBasket.active && egg.mathY <= compRimY + 0.6 && prevEggY >= companionBasket.mathY)
+        {
+            const double compDeltaX = std::abs(egg.mathX - companionBasket.mathX);
+            if (compDeltaX <= companionBasket.halfWidth + 0.8)
             {
-                score += 50;
-                highScore = std::max(highScore, score);
-                spawnCatchParticles(fallingEgg.mathX, rimY, QColor(255, 215, 0), 24);
-                addFloatingText(basket.mathX, rimY + 3.0, "⭐ +50 BONUS! ⭐", QColor(255, 215, 0));
-                statusMessage = "⭐ BONUS! Caught Golden Egg! +50 pts! ⭐";
+                egg.active = false;
+                handled = true;
+
+                if (egg.type == EggType::REGULAR)
+                {
+                    score += 10;
+                    highScore = std::max(highScore, score);
+                    spawnCatchParticles(egg.mathX, compRimY, QColor(0, 229, 255), 14);
+                    addFloatingText(companionBasket.mathX, compRimY + 3.0, "COMPANION +10", QColor(0, 229, 255));
+                    statusMessage = "🤖 Companion caught Regular Egg! +10 pts";
+                    triggerSound(SoundId::CATCH_REGULAR);
+                }
+                else if (egg.type == EggType::GOLDEN)
+                {
+                    score += 50;
+                    highScore = std::max(highScore, score);
+                    spawnCatchParticles(egg.mathX, compRimY, QColor(255, 215, 0), 24);
+                    addFloatingText(companionBasket.mathX, compRimY + 3.0, "COMPANION +50 ⭐", QColor(255, 215, 0));
+                    statusMessage = "🤖 Companion caught Golden Egg! +50 pts";
+                    triggerSound(SoundId::CATCH_GOLDEN);
+                }
+                else if (egg.type == EggType::BASKET_GROW)
+                {
+                    score += 25;
+                    highScore = std::max(highScore, score);
+                    growthEggCount++;
+                    spawnCatchParticles(egg.mathX, compRimY, QColor(46, 204, 113), 26);
+                    addFloatingText(companionBasket.mathX, compRimY + 4.0, "COMPANION +1 GROWTH", QColor(46, 204, 113));
+                    statusMessage = QString("🤖 Companion retrieved a Growth Egg! (%1 in inventory)").arg(growthEggCount);
+                    triggerSound(SoundId::CATCH_GROW);
+                }
+                else if (egg.type == EggType::BASKET_RESTORE)
+                {
+                    score += 100;
+                    highScore = std::max(highScore, score);
+                    basket.halfWidth = 9;
+                    spawnCatchParticles(egg.mathX, compRimY, QColor(0, 229, 255), 36);
+                    addFloatingText(companionBasket.mathX, compRimY + 4.0, "COMPANION FULL RECOVERY!", QColor(0, 229, 255));
+                    statusMessage = "🤖 Companion caught the Legendary Restoration Egg! Basket fully restored!";
+                    triggerSound(SoundId::CATCH_LEGENDARY);
+                }
+                else if (egg.type == EggType::BIRD_POOP)
+                {
+                    spawnPoopSplashParticles(egg.mathX, compRimY);
+                    addFloatingText(companionBasket.mathX, compRimY + 4.0, "DEFLECTED! 🛡️", QColor(0, 229, 255));
+                    statusMessage = "🤖 Companion basket deflected bird poop! Safe!";
+                    triggerSound(SoundId::SPLAT);
+                }
+
+                if (gameState == GameState::PLAYING)
+                {
+                    checkLevelUp(grid);
+                }
             }
-            else if (fallingEgg.type == EggType::BASKET_GROW)
+        }
+
+        // 3. Collision with Ground
+        if (!handled && egg.mathY <= groundMathY + 1.0)
+        {
+            egg.active = false;
+            handled = true;
+
+            if (egg.type == EggType::REGULAR || egg.type == EggType::GOLDEN)
             {
-                score += 25;
-                highScore = std::max(highScore, score);
-                basket.halfWidth = std::min(10, basket.halfWidth + 2); // Widen basket!
-                lastGrowEggMissLevel = 0;
-                spawnCatchParticles(fallingEgg.mathX, rimY, QColor(46, 204, 113), 26);
-                addFloatingText(basket.mathX, rimY + 4.0, "🧺 SIZE UP! +25 🧺", QColor(46, 204, 113));
-                statusMessage = "🌟 BASKET EXPANDED! Basket grew larger! +25 pts";
-            }
-            else if (fallingEgg.type == EggType::BASKET_RESTORE)
-            {
-                score += 100;
-                highScore = std::max(highScore, score);
-                basket.halfWidth = 9; // Full starting basket size restored!
-                spawnCatchParticles(fallingEgg.mathX, rimY, QColor(0, 229, 255), 36);
-                addFloatingText(basket.mathX, rimY + 4.0, "🌈 FULL RECOVERY! +100 🌈", QColor(0, 229, 255));
-                statusMessage = "🌈 LEGENDARY RECOVERY! Basket restored to full starting size! +100 pts";
-            }
-            else if (fallingEgg.type == EggType::BIRD_POOP)
-            {
-                // Catching bird poop decreases hearts by one!
+                spawnSplatParticles(egg.mathX, groundMathY + 1, egg.type);
                 hearts--;
-                spawnPoopSplashParticles(fallingEgg.mathX, rimY);
-                addFloatingText(basket.mathX, rimY + 4.0, "YUCK! -1 ❤", QColor(231, 76, 60));
+                addFloatingText(egg.mathX, groundMathY + 3.0, "SPLAT! -1 ❤", QColor(231, 76, 60));
 
                 if (hearts <= 0)
                 {
                     hearts = 0;
-                    gameOverReason = "Caught Bird Poop! Lost your final heart.";
+                    gameOverReason = "Out of Hearts! 3 misses reached.";
                     gameState = GameState::GAME_OVER;
-                    statusMessage = "💩 Game Over! Caught bird poop and lost your final heart!";
+                    statusMessage = "Game Over! You lost all 3 hearts.";
+                    triggerSound(SoundId::GAME_OVER);
                 }
                 else
                 {
-                    statusMessage = QString("💩 Yuck! You caught bird poop! Lost 1 heart (%1 left).").arg(hearts);
+                    statusMessage = QString("Egg missed and cracked! Lost 1 heart (%1 left).").arg(hearts);
+                    triggerSound(SoundId::SPLAT);
                 }
             }
-
-            if (gameState == GameState::PLAYING)
+            else if (egg.type == EggType::BASKET_GROW)
             {
-                checkLevelUp(grid);
+                lastGrowEggMissLevel = level;
+                spawnCatchParticles(egg.mathX, groundMathY + 1, QColor(46, 204, 113), 16);
+                addFloatingText(egg.mathX, groundMathY + 3.0, "MISSED! COOLDOWN: 4 LVLS", QColor(231, 76, 60));
+                statusMessage = QString("Growth egg broke! No growth eggs for at least 4 levels (until Level %1).").arg(level + 4);
+                triggerSound(SoundId::SPLAT);
             }
-            return;
-        }
-    }
-
-    // 2. Collision with Ground
-    if (fallingEgg.mathY <= groundMathY + 1.0)
-    {
-        fallingEgg.active = false;
-
-        if (fallingEgg.type == EggType::REGULAR || fallingEgg.type == EggType::GOLDEN)
-        {
-            spawnSplatParticles(fallingEgg.mathX, groundMathY + 1, fallingEgg.type);
-            hearts--;
-            addFloatingText(fallingEgg.mathX, groundMathY + 3.0, "SPLAT! -1 ❤", QColor(231, 76, 60));
-
-            if (hearts <= 0)
+            else if (egg.type == EggType::BASKET_RESTORE)
             {
-                hearts = 0;
-                gameOverReason = "Out of Hearts! 3 misses reached.";
-                gameState = GameState::GAME_OVER;
-                statusMessage = "Game Over! You lost all 3 hearts.";
+                spawnCatchParticles(egg.mathX, groundMathY + 1, QColor(0, 229, 255), 18);
+                addFloatingText(egg.mathX, groundMathY + 3.0, "RESTORATION MISSED", QColor(149, 165, 166));
+                statusMessage = "Restoration egg broke on the ground! Keep catching!";
+                triggerSound(SoundId::SPLAT);
             }
-            else
+            else if (egg.type == EggType::BIRD_POOP)
             {
-                statusMessage = QString("Egg missed and cracked! Lost 1 heart (%1 left).").arg(hearts);
+                spawnPoopSplashParticles(egg.mathX, groundMathY + 1);
+
+                if (mode == GameMode::MEDIUM || mode == GameMode::HARD)
+                {
+                    StickyPuddle sp;
+                    sp.mathX = egg.mathX;
+                    sp.radius = (mode == GameMode::HARD ? 6.0 : 3.5);
+                    sp.lifeTicks = 350;
+                    sp.maxLifeTicks = 350;
+                    stickyPuddles.push_back(sp);
+
+                    addFloatingText(egg.mathX, groundMathY + 3.0, (mode == GameMode::HARD ? "STICKY SLIME (LARGE)!" : "STICKY SLIME!"), QColor(139, 195, 74));
+                    statusMessage = (mode == GameMode::HARD ? "💩 Bird poop made a LARGE sticky puddle! Avoid getting slowed down!"
+                                                           : "💩 Bird poop made a sticky puddle! Avoid getting slowed down!");
+                    triggerSound(SoundId::POOP_GROUND);
+                }
+                else
+                {
+                    addFloatingText(egg.mathX, groundMathY + 3.0, "DODGED POOP! Safe!", QColor(168, 199, 250));
+                    statusMessage = "💩 Bird poop safely splattered on the ground! Nice dodge!";
+                    triggerSound(SoundId::POOP_GROUND);
+                }
             }
         }
-        else if (fallingEgg.type == EggType::BASKET_GROW)
+
+        if (handled)
         {
-            lastGrowEggMissLevel = level;
-            spawnCatchParticles(fallingEgg.mathX, groundMathY + 1, QColor(46, 204, 113), 16);
-            addFloatingText(fallingEgg.mathX, groundMathY + 3.0, "MISSED! COOLDOWN: 4 LVLS", QColor(231, 76, 60));
-            statusMessage = QString("Growth egg broke! No growth eggs for at least 4 levels (until Level %1).").arg(level + 4);
+            fallingEggs[i] = fallingEggs.back();
+            fallingEggs.pop_back();
         }
-        else if (fallingEgg.type == EggType::BASKET_RESTORE)
+        else
         {
-            spawnCatchParticles(fallingEgg.mathX, groundMathY + 1, QColor(0, 229, 255), 18);
-            addFloatingText(fallingEgg.mathX, groundMathY + 3.0, "RESTORATION MISSED", QColor(149, 165, 166));
-            statusMessage = "Restoration egg broke on the ground! Keep catching!";
-        }
-        else if (fallingEgg.type == EggType::BIRD_POOP)
-        {
-            // Bird poop hit the ground - safely dodged!
-            spawnPoopSplashParticles(fallingEgg.mathX, groundMathY + 1);
-            addFloatingText(fallingEgg.mathX, groundMathY + 3.0, "DODGED POOP! Safe!", QColor(168, 199, 250));
-            statusMessage = "💩 Bird poop safely splattered on the ground! Nice dodge!";
+            ++i;
         }
     }
 }
@@ -884,7 +1441,7 @@ void GameEngine::updateParticles()
         GameParticle &p = particles[i];
         p.x += p.vx;
         p.y += p.vy;
-        p.vy -= 0.04; // gravity
+        p.vy -= 0.04;
         p.life--;
 
         if (p.life <= 0)

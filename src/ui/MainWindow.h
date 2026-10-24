@@ -2,20 +2,19 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QPoint>
+#include <QTimer>
 #include <QKeyEvent>
+#include <QMoveEvent>
 #include <QResizeEvent>
 #include "Grid.h"
 #include "Pixel.h"
 #include "GameEngine.h"
 #include "GameRenderer.h"
+#include "AudioManager.h"
 
-namespace Ui {
-class MainWindow;
-}
-
-class QLabel;
-class QTimer;
+QT_BEGIN_NAMESPACE
+namespace Ui { class MainWindow; }
+QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow
 {
@@ -27,6 +26,8 @@ public:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void moveEvent(QMoveEvent *event) override;
+    void changeEvent(QEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -53,6 +54,10 @@ private:
     MyPixels myPixels;
     GameEngine engine;
     GameRenderer renderer;
+    AudioManager audioManager;
+
+    void lockCursorToFrame();
+    void unlockCursor();
 
     void resetGame();
     void togglePause();

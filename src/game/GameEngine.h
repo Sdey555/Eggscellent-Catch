@@ -1,16 +1,17 @@
 #ifndef GAMEENGINE_H
 #define GAMEENGINE_H
 
+#include <vector>
+#include <random>
+#include <functional>
+#include <QString>
+#include <QColor>
 #include "GameTypes.h"
 #include "Basket.h"
 #include "Bird.h"
 #include "FallingEgg.h"
 #include "Particle.h"
-#include <vector>
-#include <random>
-#include <QString>
-
-class MyGrid;
+#include "Grid.h"
 
 // -------------------------------------------------------------
 // Core Game Engine: Manages Rules, Entities, Physics, Difficulty
@@ -20,6 +21,7 @@ class GameEngine
 public:
     static constexpr int MAX_LEVEL = 50;
     static constexpr int POINTS_PER_LEVEL = 100;
+    static constexpr int DAY_NIGHT_CYCLE_TICKS = 2400; // ~72s per full day-night cycle
 
     GameEngine();
 
@@ -34,6 +36,18 @@ public:
     void handleMouseMove(int screenX);
     void handleMouseLeftClick(int clickX);
     void handleMouseRightClick();
+
+    // Mode selection & special action keys
+    GameMode getMode() const { return mode; }
+    void setMode(GameMode m);
+    void setMode(GameMode m, const MyGrid &grid);
+    void cycleMode(const MyGrid &grid);
+    void useGrowthEgg();           // Triggered by 'H' key
+    void summonCompanionBasket();   // Triggered by 'C' key (Hard mode)
+
+    // Audio Callback
+    using SoundCallback = std::function<void(SoundId)>;
+    void setSoundCallback(SoundCallback cb) { soundCallback = cb; }
 
     // Accessors
     GameState getState() const { return gameState; }
@@ -50,20 +64,45 @@ public:
     const QString& getStatusMessage() const { return statusMessage; }
     void setStatusMessage(const QString &msg) { statusMessage = msg; }
 
+    bool isMouseControl() const { return mouseControl; }
+
+    int getGrowthEggCount() const { return growthEggCount; }
     const Basket& getBasket() const { return basket; }
     const std::vector<Bird>& getBirds() const { return birds; }
-    const FallingEgg& getFallingEgg() const { return fallingEgg; }
+    const std::vector<FallingEgg>& getFallingEggs() const { return fallingEggs; }
+    const FallingEgg& getFallingEgg() const; // Backwards compatibility
+    const CompanionBasket& getCompanionBasket() const { return companionBasket; }
+    const std::vector<StickyPuddle>& getStickyPuddles() const { return stickyPuddles; }
     bool isLegendaryBirdActive() const { return legendaryBirdActive; }
     const Bird& getLegendaryBird() const { return legendaryBird; }
     const std::vector<GameParticle>& getParticles() const { return particles; }
     const std::vector<FloatingText>& getFloatingTexts() const { return floatingTexts; }
 
+    // Day/Night & Weather Accessors
+    int getDayNightTick() const { return dayNightTick; }
+    bool isThunderstormActive() const { return thunderstormActive; }
+    int getThunderstormTicks() const { return thunderstormTicks; }
+    int getLightningFlashTicks() const { return lightningFlashTicks; }
+    double getDayNightProgress() const;
+    double getNightDurationRatio() const;
+
+    // Thunderstrike & Shock Accessors
+    int getLightningShockTimer() const { return lightningShockTimer; }
+    int getLightningStrikeState() const { return lightningStrikeState; }
+    int getLightningStrikeTimer() const { return lightningStrikeTimer; }
+    double getLightningStrikeX() const { return lightningStrikeX; }
+
+    // Difficulty helpers
     int levelForScore(int s) const;
     double levelSpeedMultiplier() const;
+    double levelPoopProbability() const;
+    double levelEggFallSpeed() const;
 
 private:
     GameState gameState{GameState::MENU};
+    GameMode mode{GameMode::EASY};
     int menuSlideIndex{0};
+
     int score{0};
     int highScore{0};
     int hearts{3};
@@ -71,17 +110,34 @@ private:
     int levelBannerTicks{0};
     int lastRestoreEggLevel{0};
     int lastGrowEggMissLevel{0};
+    int growthEggCount{0};
     QString gameOverReason;
     QString statusMessage;
 
     Basket basket;
+    CompanionBasket companionBasket;
     std::vector<Bird> birds;
-    FallingEgg fallingEgg;
+    std::vector<FallingEgg> fallingEggs;
+    std::vector<StickyPuddle> stickyPuddles;
     std::vector<GameParticle> particles;
     std::vector<FloatingText> floatingTexts;
 
     int eggSpawnCooldown{100};
+    int dualDropCooldownTicks{900};
     int groundMathY{-24};
+
+    // Day / Night & Weather
+    int dayNightTick{0};
+    bool thunderstormActive{false};
+    int thunderstormTicks{0};
+    int thunderstormCooldown{3000}; // Rare: 90-150s cooldown
+    int lightningFlashTicks{0};
+
+    // Thunderstrike & Basket Shock
+    int lightningShockTimer{0};
+    int lightningStrikeState{0}; // 0 = idle, 1 = warning sizzle, 2 = striking
+    int lightningStrikeTimer{0};
+    double lightningStrikeX{0.0};
 
     bool keyLeftPressed{false};
     bool keyRightPressed{false};
@@ -94,7 +150,7 @@ private:
     // Special Legendary Bird (spawns exclusively to lay the Legendary Egg)
     bool legendaryBirdActive{false};
     Bird legendaryBird;
-    int legendaryPathType{0}; // 0 = SINE_WAVE, 1 = SWOOP_ARC, 2 = DIAGONAL_GLIDE, 3 = HORIZONTAL_SURGE
+    int legendaryPathType{0};
     double legendaryStartX{0.0};
     double legendaryStartY{0.0};
     double legendaryBaseY{0.0};
@@ -106,17 +162,28 @@ private:
     bool legendaryEggDropped{false};
     int legendaryAnimTick{0};
 
+    SoundCallback soundCallback{nullptr};
+    void triggerSound(SoundId id) {
+        if (soundCallback) {
+            soundCallback(id);
+        }
+    }
+
     Bird createBird(size_t index, const MyGrid &grid);
     void updatePhysics(const MyGrid &grid);
     void updateBirds(const MyGrid &grid);
     void updateLegendaryBird(const MyGrid &grid);
     void spawnLegendaryBird(const MyGrid &grid);
     void updateEggSpawn(const MyGrid &grid);
-    void updateFallingEgg(const MyGrid &grid);
+    void updateFallingEggs(const MyGrid &grid);
+    void updateWeather();
+    void updateThunderstormStrike(const MyGrid &grid);
+    void updateCompanionBasket(const MyGrid &grid);
     void updateParticles();
     void checkLevelUp(const MyGrid &grid);
     void applyLevelSettings(const MyGrid &grid);
 
+    void spawnEggFromBird(Bird &bird, const MyGrid &grid, EggType eType);
     void spawnCatchParticles(double x, double y, const QColor &col, int count = 14);
     void spawnSplatParticles(double x, double y, EggType type);
     void spawnPoopSplashParticles(double x, double y);

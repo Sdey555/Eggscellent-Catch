@@ -157,156 +157,175 @@ void rasterizeLegendaryBird(MyPixels &pixels, const Bird &b)
         pixels.setPixel(bx + ox * dir, by + oy, col);
     };
 
-    // Shifting prismatic celestial colors matching the legendary restoration egg
-    static const QColor spectrum[5] = {
-        QColor(233, 30, 99),   // Rose Magenta
-        QColor(156, 39, 176),  // Royal Violet
-        QColor(0, 229, 255),   // Electric Cyan
-        QColor(0, 230, 118),   // Spring Emerald
-        QColor(255, 215, 0)    // Bright Gold
-    };
-    const int sShift = (b.animTick / 3) % 5;
+    // Authentic Fire Phoenix Palette (Molten Core, Blazing Amber, Searing Crimson)
+    const QColor emberOutline(62, 14, 14);    // Deep smoldering dark contour
+    const QColor flameDarkRed(178, 24, 24);   // Deep scorched crimson
+    const QColor flameCrimson(229, 57, 53);   // Searing fire scarlet
+    const QColor flameOrange(244, 81, 30);    // Roaring flame orange
+    const QColor flameAmber(255, 143, 0);     // Molten amber
+    const QColor flameGold(255, 193, 7);      // Radiant solar gold
+    const QColor flameYellow(255, 238, 88);   // Incandescent fire yellow
+    const QColor flameWhite(255, 254, 235);   // White-hot spark tip
 
-    const QColor goldCrown(255, 215, 0);
-    const QColor goldDeep(230, 126, 34);
-    const QColor goldBright(255, 235, 59);
-    const QColor diamondGlint = (b.animTick % 4 < 2) ? QColor(255, 255, 255) : QColor(224, 247, 250);
-    const QColor eyeCyan(0, 229, 255);
-    const QColor rubyGem(231, 76, 60);
+    // Subtle living flame temperature flicker
+    const int flickerTick = (b.animTick % 6);
+    const QColor flameTipA = (flickerTick < 3) ? flameWhite : flameYellow;
+    const QColor flameTipB = (flickerTick < 3) ? flameYellow : flameGold;
+    const QColor flameFeatherCore = (flickerTick % 2 == 0) ? flameYellow : flameGold;
+    const QColor flameFeatherMid = (flickerTick % 2 == 0) ? flameOrange : flameAmber;
 
-    // 1. Royal Raptor Beak (Extended and sharp: ox +8 to +11, rows +1 to +2)
-    drawOffset(11, 1, goldBright);
-    drawOffset(10, 1, goldBright);
-    drawOffset(10, 2, goldDeep);
-    drawOffset(9, 1, goldDeep);
-    drawOffset(9, 2, goldBright);
-    drawOffset(8, 1, goldDeep);
-    drawOffset(8, 2, goldBright);
+    // 1. Royal Raptor Beak (Curved golden raptor beak: ox +8 to +11, rows +1 to +2)
+    drawOffset(11, 1, flameYellow);
+    drawOffset(10, 1, flameGold);
+    drawOffset(10, 2, flameAmber);
+    drawOffset(9, 1, flameAmber);
+    drawOffset(9, 2, flameGold);
+    drawOffset(8, 1, flameAmber);
+    drawOffset(8, 2, flameGold);
 
-    // 2. Crown Crest with Shimmering Diamond Stars (ox +3 to +8, rows +5 to +7)
-    drawOffset(4, 7, diamondGlint);
-    drawOffset(6, 7, diamondGlint);
-    drawOffset(8, 7, diamondGlint);
+    // 2. Crown of Rising Flames (Licking tongues of fire: ox +3 to +8, rows +5 to +7)
+    drawOffset(4, 7, flameTipA);
+    drawOffset(6, 7, flameTipA);
+    drawOffset(8, 7, flameTipA);
 
-    drawOffset(4, 6, spectrum[(sShift + 0) % 5]);
-    drawOffset(5, 6, goldCrown);
-    drawOffset(6, 6, spectrum[(sShift + 1) % 5]);
-    drawOffset(7, 6, goldCrown);
-    drawOffset(8, 6, spectrum[(sShift + 2) % 5]);
+    drawOffset(4, 6, flameYellow);
+    drawOffset(5, 6, flameGold);
+    drawOffset(6, 6, flameYellow);
+    drawOffset(7, 6, flameGold);
+    drawOffset(8, 6, flameYellow);
 
-    drawOffset(3, 5, rubyGem);
-    drawOffset(4, 5, goldCrown);
-    drawOffset(5, 5, goldCrown);
-    drawOffset(6, 5, goldCrown);
-    drawOffset(7, 5, goldCrown);
-    drawOffset(8, 5, rubyGem);
+    drawOffset(3, 5, flameCrimson);
+    drawOffset(4, 5, flameOrange);
+    drawOffset(5, 5, flameGold);
+    drawOffset(6, 5, flameGold);
+    drawOffset(7, 5, flameOrange);
+    drawOffset(8, 5, flameCrimson);
 
-    // 3. Royal Head & Glowing Luminous Cyan Eye (ox +3 to +8, rows +3 to +4)
-    drawOffset(3, 4, spectrum[(sShift + 3) % 5]);
-    drawOffset(4, 4, goldCrown);
-    drawOffset(5, 4, goldBright);
-    drawOffset(6, 4, goldBright);
-    drawOffset(7, 4, goldCrown);
+    // 3. Head & Piercing Molten Gold Eye (ox +3 to +8, rows +3 to +4)
+    drawOffset(3, 4, flameCrimson);
+    drawOffset(4, 4, flameOrange);
+    drawOffset(5, 4, flameGold);
+    drawOffset(6, 4, flameYellow);
+    drawOffset(7, 4, flameGold);
 
-    drawOffset(3, 3, spectrum[(sShift + 2) % 5]);
-    drawOffset(4, 3, goldCrown);
-    drawOffset(5, 3, QColor(255, 255, 255)); // White eye ring
-    drawOffset(6, 3, eyeCyan);                // Luminous cyan pupil
-    drawOffset(7, 3, goldCrown);
+    drawOffset(3, 3, flameOrange);
+    drawOffset(4, 3, flameGold);
+    drawOffset(5, 3, flameWhite);   // White sclera spark
+    drawOffset(6, 3, flameAmber);   // Fierce amber-gold pupil
+    drawOffset(7, 3, flameGold);
 
-    // 4. Neck & High Throat (ox +2 to +7, row +2)
-    drawOffset(2, 2, spectrum[(sShift + 4) % 5]);
-    drawOffset(3, 2, spectrum[(sShift + 3) % 5]);
-    drawOffset(4, 2, goldCrown);
-    drawOffset(5, 2, goldCrown);
-    drawOffset(6, 2, goldBright);
-    drawOffset(7, 2, goldDeep);
+    // 4. Throat & High Neck (ox +2 to +7, row +2)
+    drawOffset(2, 2, flameCrimson);
+    drawOffset(3, 2, flameOrange);
+    drawOffset(4, 2, flameGold);
+    drawOffset(5, 2, flameYellow);
+    drawOffset(6, 2, flameGold);
+    drawOffset(7, 2, flameAmber);
 
-    // 5. Plump Radiant Body & Underbelly (ox -3 to +7, rows -1 to +1)
-    for (int ox = -2; ox <= 6; ++ox)
-    {
-        drawOffset(ox, 1, spectrum[(sShift + (ox + 4)) % 5]);
-    }
-    for (int ox = -3; ox <= 5; ++ox)
-    {
-        drawOffset(ox, 0, goldCrown);
-    }
-    for (int ox = -2; ox <= 4; ++ox)
-    {
-        drawOffset(ox, -1, goldDeep);
-    }
+    // 5. Fiery Body & Burning Core (ox -3 to +7, rows -1 to +1)
+    // Row +1: Shoulder & upper breast
+    drawOffset(-2, 1, flameCrimson);
+    drawOffset(-1, 1, flameOrange);
+    drawOffset(0, 1, flameOrange);
+    drawOffset(1, 1, flameGold);
+    drawOffset(2, 1, flameYellow);
+    drawOffset(3, 1, flameYellow);
+    drawOffset(4, 1, flameGold);
+    drawOffset(5, 1, flameOrange);
+    drawOffset(6, 1, flameCrimson);
 
-    // 6. Magnificent Broad Prismatic Wings (3 animated frames)
+    // Row 0: Glowing molten heart
+    drawOffset(-3, 0, emberOutline);
+    drawOffset(-2, 0, flameCrimson);
+    drawOffset(-1, 0, flameOrange);
+    drawOffset(0, 0, flameGold);
+    drawOffset(1, 0, flameFeatherCore);
+    drawOffset(2, 0, flameFeatherCore);
+    drawOffset(3, 0, flameGold);
+    drawOffset(4, 0, flameOrange);
+    drawOffset(5, 0, flameCrimson);
+
+    // Row -1: Underbelly heat shading
+    drawOffset(-2, -1, flameDarkRed);
+    drawOffset(-1, -1, flameCrimson);
+    drawOffset(0, -1, flameOrange);
+    drawOffset(1, -1, flameAmber);
+    drawOffset(2, -1, flameAmber);
+    drawOffset(3, -1, flameOrange);
+    drawOffset(4, -1, flameCrimson);
+
+    // 6. Magnificent Wings of Flame (Stepped fire feather tiers - 3 animated frames)
     if (b.wingFrame == 0)
     {
-        // Frame 0: High Wing Flap (Majestic arch up to row +8)
-        for (int ox = -1; ox <= 3; ++ox) drawOffset(ox, 3, spectrum[(sShift + 1) % 5]);
-        for (int ox = -2; ox <= 2; ++ox) drawOffset(ox, 4, spectrum[(sShift + 2) % 5]);
-        for (int ox = -3; ox <= 1; ++ox) drawOffset(ox, 5, spectrum[(sShift + 3) % 5]);
-        drawOffset(-2, 6, spectrum[(sShift + 4) % 5]);
-        drawOffset(-1, 6, spectrum[(sShift + 0) % 5]);
-        drawOffset(0, 6, diamondGlint);
-        drawOffset(-2, 7, diamondGlint);
-        drawOffset(-1, 7, spectrum[(sShift + 1) % 5]);
-        drawOffset(0, 7, diamondGlint);
-        drawOffset(-1, 8, diamondGlint);
+        // Frame 0: High Wing Flap (Majestic arch of flames reaching row +8)
+        for (int ox = -1; ox <= 3; ++ox) drawOffset(ox, 3, flameGold);
+        for (int ox = -2; ox <= 2; ++ox) drawOffset(ox, 4, flameFeatherMid);
+        for (int ox = -3; ox <= 1; ++ox) drawOffset(ox, 5, flameCrimson);
+        drawOffset(-2, 6, flameDarkRed);
+        drawOffset(-1, 6, flameCrimson);
+        drawOffset(0, 6, flameOrange);
+        drawOffset(-2, 7, flameTipB);
+        drawOffset(-1, 7, flameTipA);
+        drawOffset(0, 7, flameTipB);
+        drawOffset(-1, 8, flameTipA); // Searing white-hot spark apex
     }
     else if (b.wingFrame == 1)
     {
-        // Frame 1: Level Glide (Sweeping horizontal wing span)
-        for (int ox = -5; ox <= 2; ++ox) drawOffset(ox, 2, spectrum[(sShift + 1) % 5]);
-        for (int ox = -4; ox <= 1; ++ox) drawOffset(ox, 3, spectrum[(sShift + 2) % 5]);
-        for (int ox = -3; ox <= 0; ++ox) drawOffset(ox, 4, spectrum[(sShift + 3) % 5]);
-        drawOffset(-2, 5, diamondGlint);
-        drawOffset(-1, 5, diamondGlint);
+        // Frame 1: Level Glide (Broad sweeping fire wing)
+        for (int ox = -5; ox <= 2; ++ox) drawOffset(ox, 2, (ox >= 0 ? flameGold : flameOrange));
+        for (int ox = -4; ox <= 1; ++ox) drawOffset(ox, 3, (ox >= 0 ? flameOrange : flameCrimson));
+        for (int ox = -3; ox <= 0; ++ox) drawOffset(ox, 4, flameCrimson);
+        drawOffset(-2, 5, flameTipA);
+        drawOffset(-1, 5, flameTipA);
     }
     else
     {
-        // Frame 2: Downward Thrust (Power stroke sweeping down to row -4)
-        for (int ox = -2; ox <= 2; ++ox) drawOffset(ox, 1, spectrum[(sShift + 1) % 5]);
-        for (int ox = -3; ox <= 1; ++ox) drawOffset(ox, 0, spectrum[(sShift + 2) % 5]);
-        for (int ox = -4; ox <= 0; ++ox) drawOffset(ox, -1, spectrum[(sShift + 3) % 5]);
-        for (int ox = -3; ox <= -1; ++ox) drawOffset(ox, -2, spectrum[(sShift + 4) % 5]);
-        drawOffset(-3, -3, spectrum[(sShift + 0) % 5]);
-        drawOffset(-2, -3, diamondGlint);
-        drawOffset(-2, -4, diamondGlint);
+        // Frame 2: Downward Thrust (Power stroke of flames sweeping down to row -4)
+        for (int ox = -2; ox <= 2; ++ox) drawOffset(ox, 1, flameGold);
+        for (int ox = -3; ox <= 1; ++ox) drawOffset(ox, 0, flameOrange);
+        for (int ox = -4; ox <= 0; ++ox) drawOffset(ox, -1, flameCrimson);
+        for (int ox = -3; ox <= -1; ++ox) drawOffset(ox, -2, flameDarkRed);
+        drawOffset(-3, -3, flameOrange);
+        drawOffset(-2, -3, flameTipB);
+        drawOffset(-2, -4, flameTipA); // Searing downward spark
     }
 
-    // 7. Trailing Phoenix Twin Streamer Tails (Undulating ribbons back to ox = -13)
+    // 7. Trailing Twin Fire Streamers (Living flame ribbons undulating back to ox = -13)
     const int waveA = static_cast<int>(std::round(std::sin((b.animTick + 0) * 0.4) * 1.5));
     const int waveB = static_cast<int>(std::round(std::sin((b.animTick + 3) * 0.4) * 1.5));
 
-    // Upper Streamer Ribbon
-    drawOffset(-4, 2, spectrum[(sShift + 0) % 5]);
-    drawOffset(-5, 2, spectrum[(sShift + 1) % 5]);
-    drawOffset(-6, 2 + waveA, spectrum[(sShift + 2) % 5]);
-    drawOffset(-7, 2 + waveA, spectrum[(sShift + 3) % 5]);
-    drawOffset(-8, 3 + waveA, spectrum[(sShift + 4) % 5]);
-    drawOffset(-9, 3 + waveA, spectrum[(sShift + 0) % 5]);
-    drawOffset(-10, 3 + waveA, goldCrown);
-    drawOffset(-11, 3 + waveA, goldCrown);
-    drawOffset(-12, 3 + waveA, diamondGlint);
-    drawOffset(-13, 4 + waveA, diamondGlint);
+    // Upper Fire Streamer
+    drawOffset(-4, 2, flameOrange);
+    drawOffset(-5, 2, flameOrange);
+    drawOffset(-6, 2 + waveA, flameCrimson);
+    drawOffset(-7, 2 + waveA, flameCrimson);
+    drawOffset(-8, 3 + waveA, flameDarkRed);
+    drawOffset(-9, 3 + waveA, flameCrimson);
+    drawOffset(-10, 3 + waveA, flameOrange);
+    drawOffset(-11, 3 + waveA, flameGold);
+    drawOffset(-12, 3 + waveA, flameTipB);
+    drawOffset(-13, 4 + waveA, flameTipA); // White-hot flame spark tip
 
-    // Lower Streamer Ribbon
-    drawOffset(-4, 0, spectrum[(sShift + 2) % 5]);
-    drawOffset(-5, 0, spectrum[(sShift + 3) % 5]);
-    drawOffset(-6, 0 + waveB, spectrum[(sShift + 4) % 5]);
-    drawOffset(-7, -1 + waveB, spectrum[(sShift + 0) % 5]);
-    drawOffset(-8, -1 + waveB, spectrum[(sShift + 1) % 5]);
-    drawOffset(-9, -1 + waveB, goldCrown);
-    drawOffset(-10, -2 + waveB, goldCrown);
-    drawOffset(-11, -2 + waveB, rubyGem);
-    drawOffset(-12, -2 + waveB, diamondGlint);
+    // Lower Fire Streamer
+    drawOffset(-4, 0, flameOrange);
+    drawOffset(-5, 0, flameCrimson);
+    drawOffset(-6, 0 + waveB, flameCrimson);
+    drawOffset(-7, -1 + waveB, flameDarkRed);
+    drawOffset(-8, -1 + waveB, flameCrimson);
+    drawOffset(-9, -1 + waveB, flameOrange);
+    drawOffset(-10, -2 + waveB, flameGold);
+    drawOffset(-11, -2 + waveB, flameAmber);
+    drawOffset(-12, -2 + waveB, flameTipA); // Ember spark tip
 
     // 8. Warning indicator when preparing to lay the legendary egg
     if (b.isLaying)
     {
-        pixels.setPixel(bx, by - 3, diamondGlint);
-        pixels.setPixel(bx, by - 4, spectrum[sShift]);
-        pixels.setPixel(bx - 1, by - 3, spectrum[(sShift + 1) % 5]);
-        pixels.setPixel(bx + 1, by - 3, spectrum[(sShift + 2) % 5]);
-        pixels.setPixel(bx - 2, by - 4, goldCrown);
-        pixels.setPixel(bx + 2, by - 4, goldCrown);
+        const QColor fireAlert = (b.layingCountdown % 4 < 2) ? flameWhite : flameYellow;
+        pixels.setPixel(bx, by - 3, fireAlert);
+        pixels.setPixel(bx, by - 4, flameOrange);
+        pixels.setPixel(bx - 1, by - 3, flameGold);
+        pixels.setPixel(bx + 1, by - 3, flameGold);
+        pixels.setPixel(bx - 2, by - 4, flameCrimson);
+        pixels.setPixel(bx + 2, by - 4, flameCrimson);
     }
 }

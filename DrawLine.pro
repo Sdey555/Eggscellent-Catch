@@ -1,10 +1,9 @@
 TEMPLATE = app
 TARGET = EggscellentCatch
 
-QT += core gui widgets
+QT += core gui widgets multimedia
 
 CONFIG += c++17
-
 
 INCLUDEPATH += . \
     src \
@@ -12,6 +11,7 @@ INCLUDEPATH += . \
     src/entities \
     src/game \
     src/rendering \
+    src/audio \
     src/ui
 
 SOURCES += \
@@ -24,6 +24,7 @@ SOURCES += \
     src/game/GameEngine.cpp \
     src/rendering/PixelFont.cpp \
     src/rendering/GameRenderer.cpp \
+    src/audio/AudioManager.cpp \
     src/ui/CanvasLabel.cpp \
     src/ui/MainWindow.cpp
 
@@ -38,8 +39,12 @@ HEADERS += \
     src/game/GameEngine.h \
     src/rendering/PixelFont.h \
     src/rendering/GameRenderer.h \
+    src/audio/AudioManager.h \
     src/ui/CanvasLabel.h \
     src/ui/MainWindow.h
+
+RESOURCES += \
+    audio.qrc
 
 FORMS += \
     src/ui/mainwindow.ui

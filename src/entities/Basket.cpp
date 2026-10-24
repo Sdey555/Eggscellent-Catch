@@ -86,3 +86,75 @@ void rasterizeBasket(MyPixels &pixels, const Basket &b)
         pixels.setPixel(x, by, QColor(62, 39, 35));
     }
 }
+
+void rasterizeCompanionBasket(MyPixels &pixels, const CompanionBasket &comp)
+{
+    if (!comp.active)
+    {
+        return;
+    }
+
+    const int bx = static_cast<int>(std::round(comp.mathX));
+    const int by = static_cast<int>(std::round(comp.mathY));
+    const int hw = comp.halfWidth;
+
+    const QColor cyanA(0, 229, 255);
+    const QColor cyanB(0, 180, 216);
+    const QColor goldCore(255, 215, 0);
+    const QColor goldDeep(255, 160, 0);
+    const QColor whiteHot(255, 255, 240);
+    const QColor darkBase(20, 40, 60);
+
+    // Fluttering clockwork side wings
+    const int wingFlap = (comp.ticksLeft % 6 < 3) ? 1 : 0;
+    // Left Wing
+    pixels.setPixel(bx - hw - 1, by + 5 + wingFlap, whiteHot);
+    pixels.setPixel(bx - hw - 2, by + 6 + wingFlap, cyanA);
+    pixels.setPixel(bx - hw - 1, by + 4, cyanB);
+    // Right Wing
+    pixels.setPixel(bx + hw + 1, by + 5 + wingFlap, whiteHot);
+    pixels.setPixel(bx + hw + 2, by + 6 + wingFlap, cyanA);
+    pixels.setPixel(bx + hw + 1, by + 4, cyanB);
+
+    // Handles
+    pixels.setPixel(bx - hw, by + 6, goldDeep);
+    pixels.setPixel(bx - hw + 1, by + 6, goldCore);
+    pixels.setPixel(bx + hw, by + 6, goldDeep);
+    pixels.setPixel(bx + hw - 1, by + 6, goldCore);
+
+    // Top Rim: Row by + 5
+    for (int x = bx - hw + 1; x <= bx + hw - 1; ++x)
+    {
+        pixels.setPixel(x, by + 5, (x % 2 == 0) ? whiteHot : cyanA);
+    }
+
+    // Lower Rim Band: Row by + 4
+    for (int x = bx - hw; x <= bx + hw; ++x)
+    {
+        pixels.setPixel(x, by + 4, goldDeep);
+    }
+
+    // Wicker Body Row 3
+    for (int x = bx - hw; x <= bx + hw; ++x)
+    {
+        pixels.setPixel(x, by + 3, (x % 2 == 0) ? cyanA : goldCore);
+    }
+
+    // Wicker Body Row 2 (tapered)
+    for (int x = bx - hw + 1; x <= bx + hw - 1; ++x)
+    {
+        pixels.setPixel(x, by + 2, (x % 2 == 0) ? cyanB : goldDeep);
+    }
+
+    // Wicker Body Row 1 (tapered)
+    for (int x = bx - hw + 1; x <= bx + hw - 1; ++x)
+    {
+        pixels.setPixel(x, by + 1, darkBase);
+    }
+
+    // Base: Row by
+    for (int x = bx - hw + 2; x <= bx + hw - 2; ++x)
+    {
+        pixels.setPixel(x, by, darkBase);
+    }
+}

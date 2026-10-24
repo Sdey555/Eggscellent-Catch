@@ -1,6 +1,8 @@
 #ifndef BASKET_H
 #define BASKET_H
 
+#include "GameTypes.h"
+
 class MyPixels;
 
 struct Basket {
@@ -12,5 +14,6 @@ struct Basket {
 };
 
 void rasterizeBasket(MyPixels &pixels, const Basket &b);
+void rasterizeCompanionBasket(MyPixels &pixels, const CompanionBasket &comp);
 
 #endif // BASKET_H
