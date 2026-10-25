@@ -1700,6 +1700,26 @@ QRect GameRenderer::getSettingsBackButtonRect(int width, int height)
     return QRect(16, 12, 74, 28);
 }
 
+void GameRenderer::drawScrollbar(QPainter &painter, int trackX, int trackY, int trackW, int trackH, int scrollY, int maxScroll, int contentH, const QColor &accentColor)
+{
+    if (trackH <= 10) return;
+
+    // Background track
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(22, 28, 42, 170));
+    painter.drawRoundedRect(trackX, trackY, trackW, trackH, trackW / 2, trackW / 2);
+
+    if (maxScroll <= 0 || contentH <= 0) return;
+
+    // Draggable / visual thumb
+    const int thumbH = std::clamp((trackH * trackH) / contentH, 20, trackH - 2);
+    const int availableY = trackH - thumbH;
+    const int thumbY = trackY + (scrollY * availableY) / maxScroll;
+
+    painter.setBrush(accentColor);
+    painter.drawRoundedRect(trackX + 1, thumbY, trackW - 2, thumbH, (trackW - 2) / 2, (trackW - 2) / 2);
+}
+
 QRect GameRenderer::getVirtualLeftButtonRect(int width, int height)
 {
     const int btnW = std::clamp(width / 7, 68, 96);
