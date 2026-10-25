@@ -81,6 +81,9 @@ public:
     void setMouseControlAllowed(bool allowed) { mouseControlAllowed = allowed; }
     bool isLightningFlashEnabled() const { return lightningFlashEnabled; }
     void setLightningFlashEnabled(bool enabled) { lightningFlashEnabled = enabled; }
+    bool isGameAssistEnabled() const { return gameAssistEnabled; }
+    void setGameAssistEnabled(bool enabled) { gameAssistEnabled = enabled; }
+    void addWarningFloatingText(double x, double y, const QString &text, const QColor &col);
 
     ControlMode getControlMode() const { return controlMode; }
     void setControlMode(ControlMode m);
@@ -98,6 +101,8 @@ public:
     const FallingEgg& getFallingEgg() const; // Backwards compatibility
     const CompanionBasket& getCompanionBasket() const { return companionBasket; }
     const std::vector<StickyPuddle>& getStickyPuddles() const { return stickyPuddles; }
+    bool isBasketInStickyPuddle() const { return basketInStickyPuddle; }
+    bool isBirdInCloud(const Bird &bird, const MyGrid &grid) const;
     bool isLegendaryBirdActive() const { return legendaryBirdActive; }
     const Bird& getLegendaryBird() const { return legendaryBird; }
     const std::vector<GameParticle>& getParticles() const { return particles; }
@@ -152,6 +157,9 @@ private:
 
     int eggSpawnCooldown{100};
     int dualDropCooldownTicks{900};
+    int cloudDropCooldownTicks{600};
+    bool basketInStickyPuddle{false};
+    bool gameAssistEnabled{true};
     int groundMathY{-24};
 
     // Day / Night & Weather

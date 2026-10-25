@@ -24,7 +24,7 @@ You start with three hearts. Catch regular and golden eggs to score points, and 
 | Restoration egg | +100 points and restores the basket to its starting width; safe to miss |
 | Bird dropping | Catching it costs one heart; safe to miss |
 
-Growth eggs appear when the basket has become small. Press `H` to use one and widen the basket. In Hard mode, press `C` to spend two growth eggs and summon a temporary companion basket. Restoration eggs may appear after the basket has narrowed.
+Green growth egg spawn rates dynamically increase as the basket narrows; using one (`H`) expands basket size by 25% and stores it as the new baseline for future level shrinks. Birds may also drift behind foreground clouds to trigger surprise cloud drops. In Hard mode, press `C` to spend two growth eggs and summon a temporary companion basket. Restoration eggs may appear after the basket has narrowed.
 
 ## Controls
 

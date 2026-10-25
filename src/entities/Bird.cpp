@@ -136,8 +136,8 @@ void rasterizeBird(MyPixels &pixels, const Bird &b)
         drawOffset(-2, -2, wing.lighter(120));
     }
 
-    // 8. Warning indicator when bird is about to lay an egg
-    if (b.isLaying)
+    // 8. Warning indicator when bird is about to lay an egg (concealed if hidden in cloud)
+    if (b.isLaying && !b.hiddenInCloud)
     {
         const QColor alertCol = (b.layingCountdown % 4 < 2) ? QColor(255, 215, 0) : QColor(231, 76, 60);
         pixels.setPixel(bx, by - 2, alertCol);

@@ -21,6 +21,7 @@ struct Bird {
     EggType pendingEggType = EggType::REGULAR;
     bool isLegendary = false;
     int animTick = 0;
+    bool hiddenInCloud = false;
 };
 
 void rasterizeBird(MyPixels &pixels, const Bird &b);

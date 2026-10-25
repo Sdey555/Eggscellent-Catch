@@ -334,7 +334,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             redrawPixels();
             return;
         }
-        else if (key == Qt::Key_M || key == Qt::Key_S)
+        else if (key == Qt::Key_S || key == Qt::Key_O)
+        {
+            openSettings();
+            return;
+        }
+        else if (key == Qt::Key_M)
         {
             audioManager.toggleMute();
             audioManager.playSound(SoundId::UI_CLICK);
@@ -378,20 +383,35 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     }
     else if (engine.getState() == GameState::SETTINGS)
     {
-        if (key == Qt::Key_Escape || key == Qt::Key_Backspace || key == Qt::Key_Back)
+        if (key == Qt::Key_A || key == Qt::Key_G)
         {
-            togglePause();
+            engine.setGameAssistEnabled(!engine.isGameAssistEnabled());
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        else if (key == Qt::Key_Escape || key == Qt::Key_Backspace || key == Qt::Key_Back)
+        {
+            engine.setState(previousStateBeforeSettings);
+            if (previousStateBeforeSettings == GameState::PLAYING)
+            {
+                audioManager.resumeBGM();
+                lockCursorToFrame();
+            }
+            audioManager.playSound(SoundId::UI_CLICK);
+            updateHUD();
+            redrawPixels();
             return;
         }
     }
     else if (engine.getState() == GameState::PAUSED)
     {
-        if (key == Qt::Key_Escape || key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter)
+        if (key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_P)
         {
             togglePause();
             return;
         }
-        else if (key == Qt::Key_S)
+        else if (key == Qt::Key_S || key == Qt::Key_O)
         {
             openSettings();
             return;
@@ -413,10 +433,16 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         }
     }
 
-    // Toggle Pause with ESC key
-    if (key == Qt::Key_Escape)
+    // Toggle Pause with ESC, P or Space key
+    if (key == Qt::Key_Escape || key == Qt::Key_P || key == Qt::Key_Space)
     {
         togglePause();
+        return;
+    }
+
+    if (key == Qt::Key_S || key == Qt::Key_O)
+    {
+        openSettings();
         return;
     }
 
@@ -460,7 +486,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         redrawPixels();
         return;
     }
-    else if (key == Qt::Key_M || key == Qt::Key_S)
+    else if (key == Qt::Key_M)
     {
         audioManager.toggleMute();
         audioManager.playSound(SoundId::UI_CLICK);
@@ -912,13 +938,13 @@ void MainWindow::onMouseLeftClicked()
         }
 
         const int cardW = std::min(width - 40, 560);
-        const int cardH = std::min(height - 40, 350);
+        const int cardH = std::min(height - 40, 360);
         const int cardX = (width - cardW) / 2;
         const int cardY = (height - cardH) / 2;
 
         const int contentTop = cardY + 52;
         const int viewportH = cardH - 60;
-        const int totalContentH = 325;
+        const int totalContentH = 330;
         const int maxScroll = std::max(0, totalContentH - viewportH);
         const int scrollY = std::clamp(engine.getSettingsScrollY(), 0, maxScroll);
 
@@ -1053,6 +1079,25 @@ void MainWindow::onMouseLeftClicked()
                     redrawPixels();
                     return;
                 }
+            }
+
+            // --- ROW 6: Game Assist ---
+            const int y6 = contentTop + 208;
+            const QRect btnAssistOn(rowLeftX + 130, y6, 125, 26);
+            const QRect btnAssistOff(rowLeftX + 265, y6, 125, 26);
+            if (btnAssistOn.contains(logicalPos))
+            {
+                engine.setGameAssistEnabled(true);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+            else if (btnAssistOff.contains(logicalPos))
+            {
+                engine.setGameAssistEnabled(false);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
             }
         }
 

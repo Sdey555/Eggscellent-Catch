@@ -34,6 +34,7 @@ public:
 
     // On-screen touch button layouts
     static QRect getPauseButtonRect(int width, int height);
+    static QRect getSettingsButtonRect(int width, int height);
     static QRect getSettingsBackButtonRect(int width, int height);
     static QRect getVirtualLeftButtonRect(int width, int height);
     static QRect getVirtualRightButtonRect(int width, int height);
@@ -63,7 +64,8 @@ public:
                                double dayNightProgress, double nightRatio, bool isStorm, int flashTicks, int hudTick);
     static void renderPixelClouds(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
                                   int minMathX, int maxMathX, int maxMathY, int hudTick,
-                                  double dayNightProgress, double nightRatio, bool isStorm);
+                                  double dayNightProgress, double nightRatio, bool isStorm,
+                                  int passType = 0);
     static void renderPixelHills(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
                                  int minMathX, int maxMathX, int groundMathY,
                                  double dayNightProgress, double nightRatio, bool isStorm);

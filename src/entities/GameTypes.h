@@ -17,6 +17,23 @@ enum class GameMode {
     HARD
 };
 
+struct CloudDef {
+    int speedDivider;
+    int tickOffset;
+    int relY;
+    int width;
+    int height;
+    bool isForeground;
+};
+
+inline constexpr CloudDef GAME_CLOUDS[5] = {
+    { 5,  15, -18, 54, 16, true  },  // Foreground cloud covering top bird (mathY = maxMathY - 11)
+    { 6, 180, -38, 58, 18, true  },  // Foreground cloud covering lower bird (mathY = maxMathY - 32)
+    { 4, 320, -18, 50, 15, true  },  // Second foreground cloud for top bird lane
+    { 7,  90, -36, 52, 17, true  },  // Second foreground cloud for lower bird lane
+    { 8, 450, -42, 60, 16, false }   // Distant background cloud high up
+};
+
 struct StickyPuddle {
     double mathX{0.0};
     double radius{3.5};
