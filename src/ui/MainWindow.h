@@ -41,6 +41,8 @@ private slots:
     void onMouseLeftClicked();
     void onMouseLeftReleased();
     void onMouseRightClicked();
+    void onDragScrolled(int dy);
+    void onWheelScrolled(int delta);
     void startGame();
 
 private:
@@ -67,6 +69,7 @@ private:
     void updateHUD();
     void redrawPixels();
     void nextMenuSlide();
+    void prevMenuSlide();
 
     GameState previousStateBeforeSettings{GameState::PAUSED};
 };

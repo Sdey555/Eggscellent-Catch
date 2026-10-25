@@ -31,6 +31,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->frame, &CanvasLabel::Mouse_Pos, this, &MainWindow::onMouseLeftClicked);
     connect(ui->frame, &CanvasLabel::leftReleased, this, &MainWindow::onMouseLeftReleased);
     connect(ui->frame, &CanvasLabel::rightClicked, this, &MainWindow::onMouseRightClicked);
+    connect(ui->frame, &CanvasLabel::dragScrolled, this, &MainWindow::onDragScrolled);
+    connect(ui->frame, &CanvasLabel::wheelScrolled, this, &MainWindow::onWheelScrolled);
 
     gameTimer = new QTimer(this);
     connect(gameTimer, &QTimer::timeout, this, &MainWindow::gameLoopTick);
@@ -134,6 +136,14 @@ void MainWindow::nextMenuSlide()
     redrawPixels();
 }
 
+void MainWindow::prevMenuSlide()
+{
+    menuSlideIndex = (menuSlideIndex + 2) % 3;
+    engine.setMenuSlideIndex(menuSlideIndex);
+    audioManager.playSound(SoundId::UI_CLICK);
+    redrawPixels();
+}
+
 void MainWindow::startGame()
 {
     engine.setState(GameState::PLAYING);
@@ -162,7 +172,10 @@ void MainWindow::resetGame()
 
 void MainWindow::returnToMainMenu()
 {
+    menuSlideIndex = 0;
+    engine.setMenuSlideIndex(0);
     engine.setState(GameState::MENU);
+    engine.setMenuScrollY(0);
     engine.reset(myGrid);
     unlockCursor();
     audioManager.playSound(SoundId::UI_CLICK);
@@ -176,6 +189,7 @@ void MainWindow::openSettings()
 {
     previousStateBeforeSettings = engine.getState();
     engine.setState(GameState::SETTINGS);
+    engine.setSettingsScrollY(0);
     unlockCursor();
     audioManager.playSound(SoundId::UI_CLICK);
     updateHUD();
@@ -210,6 +224,7 @@ void MainWindow::togglePause()
     audioManager.playSound(SoundId::UI_CLICK);
     if (engine.getState() == GameState::PAUSED)
     {
+        engine.setPauseScrollY(0);
         audioManager.pauseBGM();
         unlockCursor();
     }
@@ -332,9 +347,19 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             startGame();
             return;
         }
+        else if (key == Qt::Key_Left)
+        {
+            prevMenuSlide();
+            return;
+        }
         else if (key == Qt::Key_Right)
         {
             nextMenuSlide();
+            return;
+        }
+        else if (key == Qt::Key_Escape || key == Qt::Key_Back || key == Qt::Key_Q)
+        {
+            QApplication::quit();
             return;
         }
     }
@@ -345,10 +370,15 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             resetGame();
             return;
         }
+        else if (key == Qt::Key_Escape || key == Qt::Key_Back || key == Qt::Key_Q)
+        {
+            QApplication::quit();
+            return;
+        }
     }
     else if (engine.getState() == GameState::SETTINGS)
     {
-        if (key == Qt::Key_Escape || key == Qt::Key_Backspace)
+        if (key == Qt::Key_Escape || key == Qt::Key_Backspace || key == Qt::Key_Back)
         {
             togglePause();
             return;
@@ -374,6 +404,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         else if (key == Qt::Key_M)
         {
             returnToMainMenu();
+            return;
+        }
+        else if (key == Qt::Key_Q || key == Qt::Key_X)
+        {
+            QApplication::quit();
             return;
         }
     }
@@ -572,6 +607,44 @@ void MainWindow::onMouseMoved(QPoint &pos)
     }
 }
 
+void MainWindow::onDragScrolled(int dy)
+{
+    const int height = ui->frame->height();
+    if (engine.getState() == GameState::SETTINGS)
+    {
+        const int cardH = std::min(height - 40, 350);
+        const int viewportH = cardH - 60;
+        const int totalContentH = 325;
+        const int maxScroll = std::max(0, totalContentH - viewportH);
+        engine.scrollSettings(-dy, maxScroll);
+        redrawPixels();
+    }
+    else if (engine.getState() == GameState::PAUSED)
+    {
+        const int cardH = std::min(height - 40, 340);
+        const int viewportH = cardH - 64;
+        const int totalContentH = 250;
+        const int maxScroll = std::max(0, totalContentH - viewportH);
+        engine.scrollPause(-dy, maxScroll);
+        redrawPixels();
+    }
+    else if (engine.getState() == GameState::MENU)
+    {
+        const int cardH = std::min(height - 40, 360);
+        const int viewportH = cardH - 62;
+        const int totalContentH = 370;
+        const int maxScroll = std::max(0, totalContentH - viewportH);
+        engine.scrollMenu(-dy, maxScroll);
+        redrawPixels();
+    }
+}
+
+void MainWindow::onWheelScrolled(int delta)
+{
+    const int step = (delta > 0) ? -32 : 32;
+    onDragScrolled(step);
+}
+
 void MainWindow::onMouseLeftClicked()
 {
     const int width = ui->frame->width();
@@ -582,47 +655,116 @@ void MainWindow::onMouseLeftClicked()
     if (engine.getState() == GameState::MENU)
     {
         const int cardW = std::min(width - 40, 520);
-        const int cardH = std::min(height - 40, 390);
+        const int cardH = std::min(height - 40, 360);
         const int cardX = (width - cardW) / 2;
         const int cardY = (height - cardH) / 2;
-        const int modeBtnW = 100;
-        const int modeBtnH = 26;
-        const int modeBarY = cardY + 75;
-        const int startModeX = cardX + (cardW - (modeBtnW * 3 + 20)) / 2;
 
-        // Check Settings Button on Menu Card
-        const QRect menuSettingsBtn(cardX + cardW - 105, cardY + 16, 85, 26);
+        // Check Settings Button on Menu Card Header
+        const QRect menuSettingsBtn(cardX + cardW - 95, cardY + 12, 80, 26);
         if (menuSettingsBtn.contains(clickPos))
         {
             openSettings();
             return;
         }
 
-        if (clickPos.y() >= modeBarY && clickPos.y() <= modeBarY + modeBtnH)
+        // Check Exit Button on Menu Card Header
+        const QRect menuExitBtn(cardX + 15, cardY + 12, 65, 26);
+        if (menuExitBtn.contains(clickPos))
         {
-            if (clickPos.x() >= startModeX && clickPos.x() <= startModeX + modeBtnW)
+            audioManager.playSound(SoundId::UI_CLICK);
+            QApplication::quit();
+            return;
+        }
+
+        const int contentTop = cardY + 54;
+        const int viewportH = cardH - 62;
+        const int totalContentH = 370;
+        const int maxScroll = std::max(0, totalContentH - viewportH);
+        const int scrollY = std::clamp(engine.getMenuScrollY(), 0, maxScroll);
+
+        // Click on Scrollbar Track
+        if (maxScroll > 0 && clickPos.x() >= cardX + cardW - 16 && clickPos.x() <= cardX + cardW - 2
+            && clickPos.y() >= contentTop && clickPos.y() <= contentTop + viewportH)
+        {
+            const float ratio = static_cast<float>(clickPos.y() - contentTop) / viewportH;
+            engine.setMenuScrollY(static_cast<int>(ratio * maxScroll));
+            redrawPixels();
+            return;
+        }
+
+        // Viewport click
+        if (clickPos.x() >= cardX + 4 && clickPos.x() <= cardX + cardW - 16
+            && clickPos.y() >= contentTop && clickPos.y() <= contentTop + viewportH)
+        {
+            const QPoint logicalPos(clickPos.x(), clickPos.y() + scrollY);
+
+            // Mode pills
+            const int modeBtnW = 100;
+            const int modeBtnH = 26;
+            const int modeBarY = contentTop + 8;
+            const int startModeX = cardX + (cardW - (modeBtnW * 3 + 20)) / 2;
+
+            if (logicalPos.y() >= modeBarY && logicalPos.y() <= modeBarY + modeBtnH)
             {
-                engine.setMode(GameMode::EASY, myGrid);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
+                if (logicalPos.x() >= startModeX && logicalPos.x() <= startModeX + modeBtnW)
+                {
+                    engine.setMode(GameMode::EASY, myGrid);
+                    audioManager.playSound(SoundId::UI_CLICK);
+                    redrawPixels();
+                    return;
+                }
+                else if (logicalPos.x() >= startModeX + modeBtnW + 10 && logicalPos.x() <= startModeX + modeBtnW * 2 + 10)
+                {
+                    engine.setMode(GameMode::MEDIUM, myGrid);
+                    audioManager.playSound(SoundId::UI_CLICK);
+                    redrawPixels();
+                    return;
+                }
+                else if (logicalPos.x() >= startModeX + (modeBtnW + 10) * 2 && logicalPos.x() <= startModeX + (modeBtnW + 10) * 2 + modeBtnW)
+                {
+                    engine.setMode(GameMode::HARD, myGrid);
+                    audioManager.playSound(SoundId::UI_CLICK);
+                    redrawPixels();
+                    return;
+                }
+            }
+
+            // Dedicated Start Game Button
+            const int startBtnW = std::min(cardW - 70, 320);
+            const int startBtnH = 34;
+            const int startBtnX = cardX + (cardW - startBtnW) / 2;
+            const int startBtnY = modeBarY + 54;
+            const QRect startBtnRect(startBtnX, startBtnY, startBtnW, startBtnH);
+            if (startBtnRect.contains(logicalPos))
+            {
+                startGame();
                 return;
             }
-            else if (clickPos.x() >= startModeX + modeBtnW + 10 && clickPos.x() <= startModeX + modeBtnW * 2 + 10)
+
+            // Tap anywhere on slide guide / pagination to advance slide
+            const int slideGuideY = startBtnY + 44;
+            if (logicalPos.y() >= slideGuideY)
             {
-                engine.setMode(GameMode::MEDIUM, myGrid);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
-                return;
-            }
-            else if (clickPos.x() >= startModeX + (modeBtnW + 10) * 2 && clickPos.x() <= startModeX + (modeBtnW + 10) * 2 + modeBtnW)
-            {
-                engine.setMode(GameMode::HARD, myGrid);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
+                if (logicalPos.x() < cardX + cardW / 2)
+                {
+                    prevMenuSlide();
+                }
+                else
+                {
+                    nextMenuSlide();
+                }
                 return;
             }
         }
 
+        // Tapping inside the card frame outside buttons does nothing (doesn't accidentally start)
+        const QRect cardRect(cardX, cardY, cardW, cardH);
+        if (cardRect.contains(clickPos))
+        {
+            return;
+        }
+
+        // Tapping outside starts game
         startGame();
         return;
     }
@@ -638,74 +780,104 @@ void MainWindow::onMouseLeftClicked()
     if (engine.getState() == GameState::PAUSED)
     {
         const int cardW = std::min(width - 40, 420);
-        const int cardH = std::min(height - 40, 360);
+        const int cardH = std::min(height - 40, 340);
         const int cardX = (width - cardW) / 2;
         const int cardY = (height - cardH) / 2;
 
-        // Difficulty Mode pills
-        const int modeBtnW = std::min(104, (cardW - 60) / 3);
-        const int modeBtnH = 27;
-        const int modeGap = 8;
-        const int totalModeW = modeBtnW * 3 + modeGap * 2;
-        const int startModeX = cardX + (cardW - totalModeW) / 2;
-        const int modeBarY = cardY + 74;
+        const int contentTop = cardY + 56;
+        const int viewportH = cardH - 64;
+        const int totalContentH = 295;
+        const int maxScroll = std::max(0, totalContentH - viewportH);
+        const int scrollY = std::clamp(engine.getPauseScrollY(), 0, maxScroll);
 
-        const QRect easyRect(startModeX, modeBarY, modeBtnW, modeBtnH);
-        const QRect medRect(startModeX + modeBtnW + modeGap, modeBarY, modeBtnW, modeBtnH);
-        const QRect hardRect(startModeX + (modeBtnW + modeGap) * 2, modeBarY, modeBtnW, modeBtnH);
-
-        if (easyRect.contains(clickPos))
+        // Click on Scrollbar Track
+        if (maxScroll > 0 && clickPos.x() >= cardX + cardW - 16 && clickPos.x() <= cardX + cardW - 2
+            && clickPos.y() >= contentTop && clickPos.y() <= contentTop + viewportH)
         {
-            engine.setMode(GameMode::EASY, myGrid);
-            audioManager.playSound(SoundId::UI_CLICK);
-            redrawPixels();
-            return;
-        }
-        else if (medRect.contains(clickPos))
-        {
-            engine.setMode(GameMode::MEDIUM, myGrid);
-            audioManager.playSound(SoundId::UI_CLICK);
-            redrawPixels();
-            return;
-        }
-        else if (hardRect.contains(clickPos))
-        {
-            engine.setMode(GameMode::HARD, myGrid);
-            audioManager.playSound(SoundId::UI_CLICK);
+            const float ratio = static_cast<float>(clickPos.y() - contentTop) / viewportH;
+            engine.setPauseScrollY(static_cast<int>(ratio * maxScroll));
             redrawPixels();
             return;
         }
 
-        const int btnW = cardW - 70;
-        const int btnH = 36;
-        const int btnGap = 9;
-        const int btnX = cardX + (cardW - btnW) / 2;
-        const int startY = cardY + 130;
+        if (clickPos.x() >= cardX + 4 && clickPos.x() <= cardX + cardW - 16
+            && clickPos.y() >= contentTop && clickPos.y() <= contentTop + viewportH)
+        {
+            const QPoint logicalPos(clickPos.x(), clickPos.y() + scrollY);
 
-        const QRect btnResume(btnX, startY, btnW, btnH);
-        const QRect btnSettings(btnX, startY + (btnH + btnGap), btnW, btnH);
-        const QRect btnRestart(btnX, startY + (btnH + btnGap) * 2, btnW, btnH);
-        const QRect btnMainMenu(btnX, startY + (btnH + btnGap) * 3, btnW, btnH);
+            // Difficulty Mode pills
+            const int modeBtnW = std::min(104, (cardW - 60) / 3);
+            const int modeBtnH = 26;
+            const int modeGap = 8;
+            const int totalModeW = modeBtnW * 3 + modeGap * 2;
+            const int startModeX = cardX + (cardW - totalModeW) / 2;
+            const int modeBarY = contentTop + 6;
 
-        if (btnResume.contains(clickPos))
-        {
-            togglePause();
-            return;
-        }
-        else if (btnSettings.contains(clickPos))
-        {
-            openSettings();
-            return;
-        }
-        else if (btnRestart.contains(clickPos))
-        {
-            resetGame();
-            return;
-        }
-        else if (btnMainMenu.contains(clickPos))
-        {
-            returnToMainMenu();
-            return;
+            const QRect easyRect(startModeX, modeBarY, modeBtnW, modeBtnH);
+            const QRect medRect(startModeX + modeBtnW + modeGap, modeBarY, modeBtnW, modeBtnH);
+            const QRect hardRect(startModeX + (modeBtnW + modeGap) * 2, modeBarY, modeBtnW, modeBtnH);
+
+            if (easyRect.contains(logicalPos))
+            {
+                engine.setMode(GameMode::EASY, myGrid);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+            else if (medRect.contains(logicalPos))
+            {
+                engine.setMode(GameMode::MEDIUM, myGrid);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+            else if (hardRect.contains(logicalPos))
+            {
+                engine.setMode(GameMode::HARD, myGrid);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+
+            // Action Buttons
+            const int btnW = cardW - 70;
+            const int btnH = 34;
+            const int btnGap = 8;
+            const int btnX = cardX + (cardW - btnW) / 2;
+            const int startY = modeBarY + 50;
+
+            const QRect btnResume(btnX, startY, btnW, btnH);
+            const QRect btnSettings(btnX, startY + (btnH + btnGap), btnW, btnH);
+            const QRect btnRestart(btnX, startY + (btnH + btnGap) * 2, btnW, btnH);
+            const QRect btnMainMenu(btnX, startY + (btnH + btnGap) * 3, btnW, btnH);
+            const QRect btnExit(btnX, startY + (btnH + btnGap) * 4, btnW, btnH);
+
+            if (btnResume.contains(logicalPos))
+            {
+                togglePause();
+                return;
+            }
+            else if (btnSettings.contains(logicalPos))
+            {
+                openSettings();
+                return;
+            }
+            else if (btnRestart.contains(logicalPos))
+            {
+                resetGame();
+                return;
+            }
+            else if (btnMainMenu.contains(logicalPos))
+            {
+                returnToMainMenu();
+                return;
+            }
+            else if (btnExit.contains(logicalPos))
+            {
+                audioManager.playSound(SoundId::UI_CLICK);
+                QApplication::quit();
+                return;
+            }
         }
 
         // Clicking anywhere inside the card frame should not resume accidentally
@@ -723,135 +895,8 @@ void MainWindow::onMouseLeftClicked()
     // 4. SETTINGS STATE
     if (engine.getState() == GameState::SETTINGS)
     {
-        const int cardW = std::min(width - 40, 560);
-        const int cardH = std::min(height - 40, 480);
-        const int cardX = (width - cardW) / 2;
-        const int cardY = (height - cardH) / 2;
-        const int rowLeftX = cardX + 35;
-
-        const int volStartX = rowLeftX + 205;
-        const int volBtnW = 50;
-        const int volBtnH = 26;
-        const int volGap = 7;
-        const float volValues[5] = {0.0f, 0.25f, 0.50f, 0.75f, 1.0f};
-
-        // --- ROW 1: Music (BGM) ---
-        const int y1 = cardY + 76;
-        const QRect bgmMuteBtn(rowLeftX + 130, y1, 65, 26);
-        if (bgmMuteBtn.contains(clickPos))
-        {
-            audioManager.setBGMMuted(!audioManager.isBGMMuted());
-            audioManager.playSound(SoundId::UI_CLICK);
-            redrawPixels();
-            return;
-        }
-        for (int i = 0; i < 5; ++i)
-        {
-            const QRect vb(volStartX + i * (volBtnW + volGap), y1, volBtnW, volBtnH);
-            if (vb.contains(clickPos))
-            {
-                if (audioManager.isBGMMuted())
-                {
-                    audioManager.setBGMMuted(false);
-                }
-                audioManager.setBGMVolume(volValues[i]);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
-                return;
-            }
-        }
-
-        // --- ROW 2: Sound Effects (SFX) ---
-        const int y2 = cardY + 124;
-        const QRect sfxMuteBtn(rowLeftX + 130, y2, 65, 26);
-        if (sfxMuteBtn.contains(clickPos))
-        {
-            audioManager.setSFXMuted(!audioManager.isSFXMuted());
-            audioManager.playSound(SoundId::UI_CLICK);
-            redrawPixels();
-            return;
-        }
-        for (int i = 0; i < 5; ++i)
-        {
-            const QRect vb(volStartX + i * (volBtnW + volGap), y2, volBtnW, volBtnH);
-            if (vb.contains(clickPos))
-            {
-                if (audioManager.isSFXMuted())
-                {
-                    audioManager.setSFXMuted(false);
-                }
-                audioManager.setSFXVolume(volValues[i]);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
-                return;
-            }
-        }
-
-        // --- ROW 3: Controls Mode ---
-        const int y3 = cardY + 172;
-        const int ctlStartX = rowLeftX + 115;
-        const int ctlBtnW = 86;
-        const int ctlBtnH = 26;
-        const int ctlGap = 6;
-        const ControlMode modes[4] = {
-            ControlMode::SCREEN_TOUCH,
-            ControlMode::VIRTUAL_BUTTONS,
-            ControlMode::GYROSCOPE,
-            ControlMode::MOUSE_KEYBOARD
-        };
-        for (int i = 0; i < 4; ++i)
-        {
-            const QRect cb(ctlStartX + i * (ctlBtnW + ctlGap), y3, ctlBtnW, ctlBtnH);
-            if (cb.contains(clickPos))
-            {
-                engine.setControlMode(modes[i]);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
-                return;
-            }
-        }
-
-        // --- ROW 4: Thunder Flash ---
-        const int y4 = cardY + 220;
-        const QRect btnFlashOn(rowLeftX + 130, y4, 110, 26);
-        const QRect btnFlashOff(rowLeftX + 250, y4, 160, 26);
-        if (btnFlashOn.contains(clickPos))
-        {
-            engine.setLightningFlashEnabled(true);
-            audioManager.playSound(SoundId::UI_CLICK);
-            redrawPixels();
-            return;
-        }
-        else if (btnFlashOff.contains(clickPos))
-        {
-            engine.setLightningFlashEnabled(false);
-            audioManager.playSound(SoundId::UI_CLICK);
-            redrawPixels();
-            return;
-        }
-
-        // --- ROW 5: Pixel Scale ---
-        const int y5 = cardY + 268;
-        const int scales[4] = {3, 4, 5, 6};
-        for (int i = 0; i < 4; ++i)
-        {
-            const QRect sb(rowLeftX + 130 + i * 65, y5, 55, 26);
-            if (sb.contains(clickPos))
-            {
-                scale = scales[i];
-                myGrid.setScale(scale);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
-                return;
-            }
-        }
-
-        // --- Back / Done Button ---
-        const int backW = 190;
-        const int backH = 36;
-        const int backX = cardX + (cardW - backW) / 2;
-        const int backY = cardY + cardH - 50;
-        const QRect btnBack(backX, backY, backW, backH);
+        // 4.1 Check small Back button OUTSIDE the page frame
+        const QRect btnBack = GameRenderer::getSettingsBackButtonRect(width, height);
         if (btnBack.contains(clickPos))
         {
             engine.setState(previousStateBeforeSettings);
@@ -866,6 +911,168 @@ void MainWindow::onMouseLeftClicked()
             return;
         }
 
+        const int cardW = std::min(width - 40, 560);
+        const int cardH = std::min(height - 40, 350);
+        const int cardX = (width - cardW) / 2;
+        const int cardY = (height - cardH) / 2;
+
+        const int contentTop = cardY + 52;
+        const int viewportH = cardH - 60;
+        const int totalContentH = 325;
+        const int maxScroll = std::max(0, totalContentH - viewportH);
+        const int scrollY = std::clamp(engine.getSettingsScrollY(), 0, maxScroll);
+
+        // Click on Scrollbar Track
+        if (maxScroll > 0 && clickPos.x() >= cardX + cardW - 16 && clickPos.x() <= cardX + cardW - 2
+            && clickPos.y() >= contentTop && clickPos.y() <= contentTop + viewportH)
+        {
+            const float ratio = static_cast<float>(clickPos.y() - contentTop) / viewportH;
+            engine.setSettingsScrollY(static_cast<int>(ratio * maxScroll));
+            redrawPixels();
+            return;
+        }
+
+        if (clickPos.x() >= cardX + 4 && clickPos.x() <= cardX + cardW - 16
+            && clickPos.y() >= contentTop && clickPos.y() <= contentTop + viewportH)
+        {
+            const QPoint logicalPos(clickPos.x(), clickPos.y() + scrollY);
+            const int rowLeftX = cardX + 30;
+
+            // --- ROW 1: Music (BGM) ---
+            const int y1 = contentTop + 8;
+            const QRect bgmMuteBtn(rowLeftX + 120, y1, 60, 26);
+            if (bgmMuteBtn.contains(logicalPos))
+            {
+                audioManager.setBGMMuted(!audioManager.isBGMMuted());
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+
+            const int volStartX = rowLeftX + 190;
+            const int volBtnW = 48;
+            const int volBtnH = 26;
+            const int volGap = 6;
+            const float volValues[5] = {0.0f, 0.25f, 0.50f, 0.75f, 1.0f};
+            for (int i = 0; i < 5; ++i)
+            {
+                const QRect vb(volStartX + i * (volBtnW + volGap), y1, volBtnW, volBtnH);
+                if (vb.contains(logicalPos))
+                {
+                    if (audioManager.isBGMMuted())
+                    {
+                        audioManager.setBGMMuted(false);
+                    }
+                    audioManager.setBGMVolume(volValues[i]);
+                    audioManager.playSound(SoundId::UI_CLICK);
+                    redrawPixels();
+                    return;
+                }
+            }
+
+            // --- ROW 2: Sound Effects (SFX) ---
+            const int y2 = contentTop + 48;
+            const QRect sfxMuteBtn(rowLeftX + 120, y2, 60, 26);
+            if (sfxMuteBtn.contains(logicalPos))
+            {
+                audioManager.setSFXMuted(!audioManager.isSFXMuted());
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+            for (int i = 0; i < 5; ++i)
+            {
+                const QRect vb(volStartX + i * (volBtnW + volGap), y2, volBtnW, volBtnH);
+                if (vb.contains(logicalPos))
+                {
+                    if (audioManager.isSFXMuted())
+                    {
+                        audioManager.setSFXMuted(false);
+                    }
+                    audioManager.setSFXVolume(volValues[i]);
+                    audioManager.playSound(SoundId::UI_CLICK);
+                    redrawPixels();
+                    return;
+                }
+            }
+
+            // --- ROW 3: Controls Mode ---
+            const int y3 = contentTop + 88;
+            const int ctlStartX = rowLeftX + 110;
+            const int ctlBtnW = 82;
+            const int ctlBtnH = 26;
+            const int ctlGap = 6;
+            const ControlMode modes[4] = {
+                ControlMode::SCREEN_TOUCH,
+                ControlMode::VIRTUAL_BUTTONS,
+                ControlMode::GYROSCOPE,
+                ControlMode::MOUSE_KEYBOARD
+            };
+            for (int i = 0; i < 4; ++i)
+            {
+                const QRect cb(ctlStartX + i * (ctlBtnW + ctlGap), y3, ctlBtnW, ctlBtnH);
+                if (cb.contains(logicalPos))
+                {
+                    engine.setControlMode(modes[i]);
+                    audioManager.playSound(SoundId::UI_CLICK);
+                    redrawPixels();
+                    return;
+                }
+            }
+
+            // --- ROW 4: Thunder Flash ---
+            const int y4 = contentTop + 128;
+            const QRect btnFlashOn(rowLeftX + 120, y4, 105, 26);
+            const QRect btnFlashOff(rowLeftX + 235, y4, 150, 26);
+            if (btnFlashOn.contains(logicalPos))
+            {
+                engine.setLightningFlashEnabled(true);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+            else if (btnFlashOff.contains(logicalPos))
+            {
+                engine.setLightningFlashEnabled(false);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+
+            // --- ROW 5: Pixel Scale ---
+            const int y5 = contentTop + 168;
+            const int scales[4] = {3, 4, 5, 6};
+            for (int i = 0; i < 4; ++i)
+            {
+                const QRect sb(rowLeftX + 120 + i * 62, y5, 52, 26);
+                if (sb.contains(logicalPos))
+                {
+                    scale = scales[i];
+                    myGrid.setScale(scale);
+                    audioManager.playSound(SoundId::UI_CLICK);
+                    redrawPixels();
+                    return;
+                }
+            }
+        }
+
+        // Clicking anywhere inside the card frame outside buttons does nothing
+        const QRect cardRect(cardX, cardY, cardW, cardH);
+        if (cardRect.contains(clickPos))
+        {
+            return;
+        }
+
+        // Clicking outside card frame closes settings
+        engine.setState(previousStateBeforeSettings);
+        if (previousStateBeforeSettings == GameState::PLAYING)
+        {
+            audioManager.resumeBGM();
+            lockCursorToFrame();
+        }
+        audioManager.playSound(SoundId::UI_CLICK);
+        updateHUD();
+        redrawPixels();
         return;
     }
 

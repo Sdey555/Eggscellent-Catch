@@ -30,9 +30,11 @@ public:
 
     static void renderPauseMenu(QPainter &painter, const GameEngine &engine, int width, int height);
     static void renderSettingsPage(QPainter &painter, const GameEngine &engine, const AudioManager *audio, int scale, int width, int height);
+    static void drawScrollbar(QPainter &painter, int trackX, int trackY, int trackW, int trackH, int scrollY, int maxScroll, int contentH, const QColor &accentColor);
 
     // On-screen touch button layouts
     static QRect getPauseButtonRect(int width, int height);
+    static QRect getSettingsBackButtonRect(int width, int height);
     static QRect getVirtualLeftButtonRect(int width, int height);
     static QRect getVirtualRightButtonRect(int width, int height);
     static QRect getGrowthButtonRect(int width, int height);

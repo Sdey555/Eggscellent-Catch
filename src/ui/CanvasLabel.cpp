@@ -14,6 +14,22 @@ void CanvasLabel::mouseMoveEvent(QMouseEvent *ev)
     QPoint clampedPos(clampedX, ev->pos().y());
     emit sendMousePosition(clampedPos);
 
+    if (isLeftPressed)
+    {
+        const int dy = ev->pos().y() - lastDragY;
+        lastDragY = ev->pos().y();
+
+        if (std::abs(ev->pos().y() - dragStartPos.y()) > 4 || std::abs(ev->pos().x() - dragStartPos.x()) > 4)
+        {
+            hasDragged = true;
+        }
+
+        if (dy != 0)
+        {
+            emit dragScrolled(dy);
+        }
+    }
+
     if (isPanning)
     {
         int dx = ev->pos().x() - lastDragPos.x();
@@ -46,11 +62,16 @@ void CanvasLabel::mousePressEvent(QMouseEvent *ev)
 {
     if (ev->button() == Qt::LeftButton)
     {
-        // Left button is reserved for gameplay (no panning) so the basket can follow the mouse
         isLeftPressed = true;
         const int clampedX = std::clamp(ev->pos().x(), 0, std::max(1, this->width() - 1));
-        lastClick = QPoint(clampedX, ev->pos().y());
-        emit Mouse_Pos();
+        dragStartPos = QPoint(clampedX, ev->pos().y());
+        lastDragPos = dragStartPos;
+        lastDragY = ev->pos().y();
+        hasDragged = false;
+        lastClick = dragStartPos;
+
+        // Immediately notify mouse position on press (for gameplay basket / virtual button response)
+        emit sendMousePosition(lastClick);
     }
     else if (ev->button() == Qt::RightButton)
     {
@@ -73,6 +94,14 @@ void CanvasLabel::mouseReleaseEvent(QMouseEvent *ev)
     {
         isLeftPressed = false;
         emit leftReleased();
+
+        // If the user did not drag/swipe, trigger tap/click
+        if (!hasDragged)
+        {
+            const int clampedX = std::clamp(ev->pos().x(), 0, std::max(1, this->width() - 1));
+            lastClick = QPoint(clampedX, ev->pos().y());
+            emit Mouse_Pos();
+        }
     }
     else if (ev->button() == Qt::RightButton)
     {
@@ -89,4 +118,14 @@ void CanvasLabel::mouseReleaseEvent(QMouseEvent *ev)
         isPanning = false;
         setCursor(Qt::CrossCursor);
     }
+}
+
+void CanvasLabel::wheelEvent(QWheelEvent *ev)
+{
+    const int dy = ev->angleDelta().y();
+    if (dy != 0)
+    {
+        emit wheelScrolled(dy);
+    }
+    QLabel::wheelEvent(ev);
 }

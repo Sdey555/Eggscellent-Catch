@@ -40,14 +40,24 @@ Growth eggs appear when the basket has become small. Press `H` to use one and wi
 
 On the start screen, select Easy/Medium/Hard with `1` / `2` / `3`, cycle modes with `Tab`, and start with `Space` or `Enter`.
 
-The settings screen also provides touch, virtual-button, and gyroscope control modes for supported devices.
+The settings screen also provides touch, virtual-button, and gyroscope control modes for supported devices. Choose a control mode there to match your device; gyroscope control requires a compatible motion sensor.
 
 ## Requirements
 
+### Desktop
+
 - Qt 6 (or Qt 5) with the **Widgets** and **Multimedia** modules
-- C++17 compiler
-- qmake
-- For the Windows portable package: 64-bit MinGW-w64 `g++` and Windows PowerShell
+- C++17 compiler and qmake
+
+### Android
+
+- Qt 6 for Android with an **arm64-v8a** kit
+- Android SDK, NDK, and JDK configured in Qt Creator
+
+### Windows portable package
+
+- 64-bit MinGW-w64 `g++`
+- Windows PowerShell
 
 ## Build and Run
 
@@ -72,6 +82,10 @@ mingw32-make
 ```
 
 Run the resulting `EggscellentCatch.exe`. Its location depends on the build directory; if you want to create the portable package, make sure the Release executable and its deployed Qt runtime files are in `release\`.
+
+### Build for Android
+
+In Qt Creator, open `DrawLine.pro`, select a configured Qt 6 Android kit, and build and deploy the application to an Android device or emulator. The project is configured for the `arm64-v8a` ABI. Touch, virtual-button, and gyroscope controls can be selected in the in-game settings; gyroscope control requires a device with a compatible motion sensor.
 
 ### Create the portable Windows executable
 

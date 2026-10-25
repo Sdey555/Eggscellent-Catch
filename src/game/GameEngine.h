@@ -55,6 +55,17 @@ public:
     void setState(GameState s) { gameState = s; }
     int getMenuSlideIndex() const { return menuSlideIndex; }
     void setMenuSlideIndex(int idx) { menuSlideIndex = idx; }
+    int getMenuScrollY() const { return menuScrollY; }
+    void setMenuScrollY(int y) { menuScrollY = std::max(0, y); }
+    void scrollMenu(int dy, int maxScroll) { menuScrollY = std::clamp(menuScrollY + dy, 0, maxScroll); }
+
+    int getPauseScrollY() const { return pauseScrollY; }
+    void setPauseScrollY(int y) { pauseScrollY = std::max(0, y); }
+    void scrollPause(int dy, int maxScroll) { pauseScrollY = std::clamp(pauseScrollY + dy, 0, maxScroll); }
+
+    int getSettingsScrollY() const { return settingsScrollY; }
+    void setSettingsScrollY(int y) { settingsScrollY = std::max(0, y); }
+    void scrollSettings(int dy, int maxScroll) { settingsScrollY = std::clamp(settingsScrollY + dy, 0, maxScroll); }
     int getScore() const { return score; }
     int getHighScore() const { return highScore; }
     int getHearts() const { return hearts; }
@@ -116,6 +127,9 @@ private:
     GameState gameState{GameState::MENU};
     GameMode mode{GameMode::EASY};
     int menuSlideIndex{0};
+    int menuScrollY{0};
+    int pauseScrollY{0};
+    int settingsScrollY{0};
 
     int score{0};
     int highScore{0};
