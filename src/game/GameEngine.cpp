@@ -106,6 +106,10 @@ void GameEngine::setMode(GameMode m)
 void GameEngine::setMode(GameMode m, const MyGrid &grid)
 {
     setMode(m);
+    if (gameState == GameState::MENU)
+    {
+        basket.halfWidth = 9;
+    }
     applyLevelSettings(grid);
 }
 
@@ -139,10 +143,11 @@ void GameEngine::useGrowthEgg()
     }
 
     growthEggCount--;
-    basket.halfWidth = std::min(10, basket.halfWidth + 2); // Widen basket!
+    const int increase = std::max(1, static_cast<int>(std::round(basket.halfWidth * 0.25)));
+    basket.halfWidth = std::min(18, basket.halfWidth + increase); // Store new 25% expanded size!
     spawnCatchParticles(basket.mathX, basket.mathY + basket.height, QColor(46, 204, 113), 24);
-    addFloatingText(basket.mathX, basket.mathY + basket.height + 4.0, "🧺 SIZE UP! 🧺", QColor(46, 204, 113));
-    statusMessage = QString("🌟 Used 1 Growth Egg! Basket expanded! (%1 in inventory)").arg(growthEggCount);
+    addFloatingText(basket.mathX, basket.mathY + basket.height + 4.0, "+25% SIZE UP! 🧺", QColor(46, 204, 113));
+    statusMessage = QString("🌟 Used 1 Growth Egg! Basket expanded +25%! (%1 in inventory)").arg(growthEggCount);
     triggerSound(SoundId::GROW_USE);
 }
 
@@ -404,7 +409,6 @@ Bird GameEngine::createBird(size_t index, const MyGrid &grid)
 
 void GameEngine::applyLevelSettings(const MyGrid &grid)
 {
-    basket.halfWidth = std::max(2, 9 - (level - 1));
     basket.height = 7;
 
     // For Med and Hard mode, start with TWO birds! Easy starts with 1.
@@ -1183,16 +1187,21 @@ void GameEngine::updateEggSpawn(const MyGrid &grid)
     {
         const int tier = (level - 1) / 3;
         auto pickEggType = [this, tier]() -> EggType {
-            const bool basketIsSmall = (basket.halfWidth <= 6);
-            const bool growCooldownPassed = (lastGrowEggMissLevel == 0 || (level - lastGrowEggMissLevel >= 4));
+            // Green Growth Egg probability dynamically scales up as basket size decreases!
+            const int baseGrowPct = (mode == GameMode::HARD ? 6 : (mode == GameMode::MEDIUM ? 8 : 10));
+            const int sizeDeficit = std::max(0, 9 - basket.halfWidth); // Increases as basket shrinks from 9 down to 2
+            const int growBonus = sizeDeficit * (mode == GameMode::HARD ? 5 : (mode == GameMode::MEDIUM ? 5 : 6));
+            const int maxGrowPct = (mode == GameMode::HARD ? 42 : (mode == GameMode::MEDIUM ? 46 : 50));
+            const int growChance = std::min(maxGrowPct, baseGrowPct + growBonus);
+
+            const bool growCooldownPassed = (lastGrowEggMissLevel == 0 || (level - lastGrowEggMissLevel >= 2) || basket.halfWidth <= 4);
             
-            int growChance = (mode == GameMode::HARD ? 10 : (mode == GameMode::MEDIUM ? 18 : 22));
             int goldenPct = (mode == GameMode::HARD ? 10 : (mode == GameMode::MEDIUM ? 14 : 18));
             int poopPct = (mode == GameMode::HARD ? std::min(60, 28 + tier * 3)
                                                  : (mode == GameMode::MEDIUM ? std::min(50, 20 + tier * 2)
                                                                              : std::min(45, 15 + tier * 2)));
 
-            if (basketIsSmall && growCooldownPassed)
+            if (growCooldownPassed)
             {
                 std::uniform_int_distribution<int> growRollDist(0, 99);
                 if (growRollDist(rng) < growChance)
@@ -1397,7 +1406,7 @@ void GameEngine::updateFallingEggs(const MyGrid &grid)
                 {
                     score += 100;
                     highScore = std::max(highScore, score);
-                    basket.halfWidth = 9;
+                    basket.halfWidth = std::max(basket.halfWidth, 9);
                     spawnCatchParticles(egg.mathX, rimY, QColor(0, 229, 255), 36);
                     addFloatingText(basket.mathX, rimY + 4.0, "🌈 FULL RECOVERY! +100 🌈", QColor(0, 229, 255));
                     statusMessage = "🌈 LEGENDARY RECOVERY! Basket restored to full starting size! +100 pts";
@@ -1472,7 +1481,7 @@ void GameEngine::updateFallingEggs(const MyGrid &grid)
                 {
                     score += 100;
                     highScore = std::max(highScore, score);
-                    basket.halfWidth = 9;
+                    basket.halfWidth = std::max(basket.halfWidth, 9);
                     spawnCatchParticles(egg.mathX, compRimY, QColor(0, 229, 255), 36);
                     addFloatingText(companionBasket.mathX, compRimY + 4.0, "COMPANION FULL RECOVERY!", QColor(0, 229, 255));
                     statusMessage = "🤖 Companion caught the Legendary Restoration Egg! Basket fully restored!";
@@ -1523,8 +1532,8 @@ void GameEngine::updateFallingEggs(const MyGrid &grid)
             {
                 lastGrowEggMissLevel = level;
                 spawnCatchParticles(egg.mathX, groundMathY + 1, QColor(46, 204, 113), 16);
-                addFloatingText(egg.mathX, groundMathY + 3.0, "MISSED! COOLDOWN: 4 LVLS", QColor(231, 76, 60));
-                statusMessage = QString("Growth egg broke! No growth eggs for at least 4 levels (until Level %1).").arg(level + 4);
+                addFloatingText(egg.mathX, groundMathY + 3.0, "MISSED! COOLDOWN: 2 LVLS", QColor(231, 76, 60));
+                statusMessage = QString("Growth egg broke! Green eggs paused until Level %1.").arg(level + 2);
                 triggerSound(SoundId::SPLAT);
             }
             else if (egg.type == EggType::BASKET_RESTORE)

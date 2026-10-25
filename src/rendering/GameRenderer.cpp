@@ -1520,7 +1520,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             painter.setPen(QColor(224, 230, 237));
             painter.drawText(colX, y, "• Move Basket : Mouse or [A / D] / [Left / Right]");
             y += 20;
-            painter.drawText(colX, y, "• Use Growth Egg : Press [H] (Expands basket)");
+            painter.drawText(colX, y, "• Use Growth Egg : Press [H] (Expands basket +25%)");
             y += 20;
             painter.drawText(colX, y, "• Summon Companion : Press [C] (Hard mode: 2 eggs, lasts 5s)");
             y += 20;
@@ -1573,7 +1573,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             painter.drawText(colX + 115, y, "+25 pts");
             painter.setFont(bodyFont);
             painter.setPen(QColor(156, 168, 184));
-            painter.drawText(colX + 180, y, "Store in inventory, press [H] to grow basket!");
+            painter.drawText(colX + 180, y, "Spawns more as basket shrinks! [H] grows +25%");
             y += lineH;
 
             painter.setFont(boldBodyFont);
