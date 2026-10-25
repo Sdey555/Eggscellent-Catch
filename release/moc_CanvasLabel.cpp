@@ -45,6 +45,7 @@ template <> constexpr inline auto CanvasLabel::qt_create_metaobjectdata<qt_meta_
         "QPoint&",
         "pos",
         "Mouse_Pos",
+        "leftReleased",
         "rightClicked",
         "panDelta",
         "dx",
@@ -58,11 +59,13 @@ template <> constexpr inline auto CanvasLabel::qt_create_metaobjectdata<qt_meta_
         }}),
         // Signal 'Mouse_Pos'
         QtMocHelpers::SignalData<void()>(5, 2, QMC::AccessPublic, QMetaType::Void),
-        // Signal 'rightClicked'
+        // Signal 'leftReleased'
         QtMocHelpers::SignalData<void()>(6, 2, QMC::AccessPublic, QMetaType::Void),
+        // Signal 'rightClicked'
+        QtMocHelpers::SignalData<void()>(7, 2, QMC::AccessPublic, QMetaType::Void),
         // Signal 'panDelta'
-        QtMocHelpers::SignalData<void(int, int)>(7, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 8 }, { QMetaType::Int, 9 },
+        QtMocHelpers::SignalData<void(int, int)>(8, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::Int, 9 }, { QMetaType::Int, 10 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -89,8 +92,9 @@ void CanvasLabel::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id,
         switch (_id) {
         case 0: _t->sendMousePosition((*reinterpret_cast<std::add_pointer_t<QPoint&>>(_a[1]))); break;
         case 1: _t->Mouse_Pos(); break;
-        case 2: _t->rightClicked(); break;
-        case 3: _t->panDelta((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[2]))); break;
+        case 2: _t->leftReleased(); break;
+        case 3: _t->rightClicked(); break;
+        case 4: _t->panDelta((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<int>>(_a[2]))); break;
         default: ;
         }
     }
@@ -99,9 +103,11 @@ void CanvasLabel::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id,
             return;
         if (QtMocHelpers::indexOfMethod<void (CanvasLabel::*)()>(_a, &CanvasLabel::Mouse_Pos, 1))
             return;
-        if (QtMocHelpers::indexOfMethod<void (CanvasLabel::*)()>(_a, &CanvasLabel::rightClicked, 2))
+        if (QtMocHelpers::indexOfMethod<void (CanvasLabel::*)()>(_a, &CanvasLabel::leftReleased, 2))
             return;
-        if (QtMocHelpers::indexOfMethod<void (CanvasLabel::*)(int , int )>(_a, &CanvasLabel::panDelta, 3))
+        if (QtMocHelpers::indexOfMethod<void (CanvasLabel::*)()>(_a, &CanvasLabel::rightClicked, 3))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (CanvasLabel::*)(int , int )>(_a, &CanvasLabel::panDelta, 4))
             return;
     }
 }
@@ -125,14 +131,14 @@ int CanvasLabel::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 4)
+        if (_id < 5)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 4;
+        _id -= 5;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 4)
+        if (_id < 5)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 4;
+        _id -= 5;
     }
     return _id;
 }
@@ -150,14 +156,20 @@ void CanvasLabel::Mouse_Pos()
 }
 
 // SIGNAL 2
-void CanvasLabel::rightClicked()
+void CanvasLabel::leftReleased()
 {
     QMetaObject::activate(this, &staticMetaObject, 2, nullptr);
 }
 
 // SIGNAL 3
+void CanvasLabel::rightClicked()
+{
+    QMetaObject::activate(this, &staticMetaObject, 3, nullptr);
+}
+
+// SIGNAL 4
 void CanvasLabel::panDelta(int _t1, int _t2)
 {
-    QMetaObject::activate<void>(this, &staticMetaObject, 3, nullptr, _t1, _t2);
+    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1, _t2);
 }
 QT_WARNING_POP

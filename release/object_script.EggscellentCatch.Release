@@ -7,7 +7,10 @@ release/FallingEgg.o
 release/GameEngine.o
 release/PixelFont.o
 release/GameRenderer.o
+release/AudioManager.o
 release/CanvasLabel.o
 release/MainWindow.o
+release/qrc_audio.o
+release/moc_AudioManager.o
 release/moc_CanvasLabel.o
 release/moc_MainWindow.o

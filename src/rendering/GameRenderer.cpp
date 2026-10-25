@@ -460,26 +460,13 @@ void GameRenderer::renderPixelSky(QPainter &painter, const MyGrid &grid, int sca
 
 void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
                                     int minMathX, int maxMathX, int maxMathY, int hudTick,
-                                    double dayNightProgress, double nightRatio, bool isStorm)
+                                    double dayNightProgress, double nightRatio, bool isStorm,
+                                    int passType)
 {
     Q_UNUSED(width);
     Q_UNUSED(height);
 
     const int mathSpan = maxMathX - minMathX + 90;
-
-    struct CloudDef {
-        int speedDivider;
-        int tickOffset;
-        int relY;
-        int width;
-        int height;
-    };
-    static const CloudDef clouds[4] = {
-        { 5,  15, -16, 48, 14 },
-        { 7, 140, -26, 40, 12 },
-        { 4, 270, -38, 54, 15 },
-        { 6, 390, -20, 36, 11 }
-    };
 
     const double nightStart = 1.0 - nightRatio;
     const double sunsetStart = nightStart - 0.14;
@@ -515,9 +502,11 @@ void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int 
         cUnderbelly = QColor(26, 28, 40);
     }
 
-    for (int i = 0; i < 4; ++i)
+    for (size_t i = 0; i < std::size(GAME_CLOUDS); ++i)
     {
-        const auto &cd = clouds[i];
+        const auto &cd = GAME_CLOUDS[i];
+        if (passType == 1 && cd.isForeground) continue;
+        if (passType == 2 && !cd.isForeground) continue;
         const int cx = minMathX - 45 + ((hudTick / cd.speedDivider) + cd.tickOffset) % mathSpan;
         const int cy = maxMathY + cd.relY;
 
@@ -541,6 +530,10 @@ void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int 
             {
                 const int mx = cx + col;
                 const int my = cy + r;
+                if (passType == 2 && my >= maxMathY - 5)
+                {
+                    continue; // Keep top HUD ribbon (Hearts and Level Bar) fully clear
+                }
                 QColor pixCol = cBody;
                 if (r >= domeH - 2)
                 {
@@ -953,8 +946,8 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     // 2. Grand drifting pixel clouds (rendered in background when not storming)
     if (!isStorm)
     {
-        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, hudTick,
-                          dnProg, nightRatio, isStorm);
+        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, engine.getDayNightTick(),
+                          dnProg, nightRatio, isStorm, /*passType=*/1);
     }
 
     // 3. Mountains & Hills (with ZERO gaps, fills completely to groundMathY)
@@ -969,8 +962,6 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     renderPixelFence(painter, grid, scale, width, height, minMathX, maxMathX, engine.getGroundMathY(),
                      dnProg, nightRatio, isStorm);
 
-    // 6. Sticky Poop Puddles on the ground
-    renderStickyPuddles(painter, grid, scale, width, height, engine.getStickyPuddles(), engine.getGroundMathY(), hudTick);
 
     // -------------------------------------------------------------
     // FOREGROUND RASTERIZATION PASS
@@ -1014,8 +1005,10 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     if (engine.getState() != GameState::MENU)
     {
         rasterizePixelHearts(pixels, minMathX + 3, maxMathY - 3, engine.getHearts(), 3);
-        rasterizeLevelBar(pixels, maxMathX - 40, maxMathX - 3, maxMathY - 2, engine.getLevel(), engine.getScore(), hudTick);
-        rasterizeEggStatus(pixels, maxMathX - 40, maxMathY - 9, engine.getGrowthEggCount(), engine.getMode() == GameMode::HARD, hudTick);
+        const int barRightMathX = maxMathX - 20;
+        const int barLeftMathX = barRightMathX - 36;
+        rasterizeLevelBar(pixels, barLeftMathX, barRightMathX, maxMathY - 2, engine.getLevel(), engine.getScore(), hudTick);
+        rasterizeEggStatus(pixels, barLeftMathX, maxMathY - 10, engine.getGrowthEggCount(), engine.getMode() == GameMode::HARD, hudTick);
     }
 
     // -------------------------------------------------------------
@@ -1163,6 +1156,15 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // -------------------------------------------------------------
+    // FOREGROUND CLOUDS: Drift in front of birds to conceal them
+    // -------------------------------------------------------------
+    if (!isStorm)
+    {
+        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, engine.getDayNightTick(),
+                          dnProg, nightRatio, isStorm, /*passType=*/2);
+    }
+
+    // -------------------------------------------------------------
     // THUNDERSTORM: Storm Clouds Overlay Covering Sheltered Birds
     // -------------------------------------------------------------
     if (isStorm)
@@ -1258,7 +1260,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // Shocked Basket Overhead Badge
-    if (engine.getLightningShockTimer() > 0)
+    if (engine.getLightningShockTimer() > 0 && engine.isGameAssistEnabled())
     {
         const Basket &b = engine.getBasket();
         const int bx = grid.mathToScreenX(static_cast<int>(std::round(b.mathX)));
@@ -1272,6 +1274,22 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.drawText(QRect(bx - 60, by - 10, 120, 20), Qt::AlignCenter, shockStr);
         painter.setPen(QColor(255, 235, 59));
         painter.drawText(QRect(bx - 61, by - 11, 120, 20), Qt::AlignCenter, shockStr);
+    }
+
+    // Sticky Poop Puddle Slowed Overhead Badge
+    if (engine.isBasketInStickyPuddle() && engine.isGameAssistEnabled())
+    {
+        const Basket &b = engine.getBasket();
+        const int bx = grid.mathToScreenX(static_cast<int>(std::round(b.mathX)));
+        const int by = grid.mathToScreenY(static_cast<int>(std::round(b.mathY + b.height + (engine.getLightningShockTimer() > 0 ? 8 : 4))));
+        const QString slowStr = "💩 SLOWED";
+
+        QFont slowFont("Segoe UI", 9, QFont::Bold);
+        painter.setFont(slowFont);
+        painter.setPen(QColor(0, 0, 0, 220));
+        painter.drawText(QRect(bx - 50, by - 10, 100, 20), Qt::AlignCenter, slowStr);
+        painter.setPen(QColor(255, 179, 0));
+        painter.drawText(QRect(bx - 51, by - 11, 100, 20), Qt::AlignCenter, slowStr);
     }
 
     // HUD Text: Level, Score, High Score & Mode
@@ -1346,9 +1364,11 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         QFont progressFont("Segoe UI", 9, QFont::Bold);
         painter.setFont(progressFont);
 
-        const int sx = grid.mathToScreenX(maxMathX - 40);
-        const int sy = grid.mathToScreenY(maxMathY - 8);
-        const int barW = grid.mathToScreenX(maxMathX - 3) - sx;
+        const int barRightMathX = maxMathX - 20;
+        const int barLeftMathX = barRightMathX - 36;
+        const int sx = grid.mathToScreenX(barLeftMathX);
+        const int sy = grid.mathToScreenY(maxMathY - 6) + 2;
+        const int barW = grid.mathToScreenX(barRightMathX) - sx;
 
         painter.setPen(QColor(0, 0, 0, 180));
         painter.drawText(QRect(sx + 1, sy + 1, barW, 20), Qt::AlignCenter, progressLabel);
@@ -1394,21 +1414,23 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.setBrush(QColor(255, 209, 102));
         painter.drawRoundedRect(cardX + 24, cardY + 65, cardW - 48, 2, 1, 1);
 
-        QFont titleFont("Segoe UI", 24, QFont::Black);
+        QFont titleFont("Segoe UI", 20, QFont::Black);
         painter.setFont(titleFont);
         painter.setPen(QColor(0, 0, 0, 200));
-        painter.drawText(QRect(cardX + 2, cardY + 12, cardW, 36), Qt::AlignCenter, "EGGSCELLENT CATCH");
+        painter.drawText(QRect(cardX + 24, cardY + 14, 320, 32), Qt::AlignLeft | Qt::AlignVCenter, "EGGSCELLENT CATCH");
         painter.setPen(QColor(255, 209, 102));
-        painter.drawText(QRect(cardX, cardY + 10, cardW, 36), Qt::AlignCenter, "EGGSCELLENT CATCH");
+        painter.drawText(QRect(cardX + 22, cardY + 12, 320, 32), Qt::AlignLeft | Qt::AlignVCenter, "EGGSCELLENT CATCH");
 
-        // Settings Button on Main Menu Card
-        const QRect menuSettingsBtn(cardX + cardW - 105, cardY + 16, 85, 26);
-        painter.setFont(QFont("Segoe UI", 9, QFont::Bold));
-        painter.setPen(QPen(QColor(0, 229, 255), 1));
+        // Settings Button on Main Menu Card (Written body: SETTINGS)
+        const int menuBtnW = 120;
+        const int menuBtnH = 30;
+        const QRect menuSettingsBtn(cardX + cardW - menuBtnW - 20, cardY + 14, menuBtnW, menuBtnH);
+        painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
+        painter.setPen(QPen(QColor(0, 229, 255), 1.5));
         painter.setBrush(QColor(18, 44, 62));
         painter.drawRoundedRect(menuSettingsBtn, 6, 6);
         painter.setPen(QColor(0, 229, 255));
-        painter.drawText(menuSettingsBtn, Qt::AlignCenter, "⚙ Settings");
+        painter.drawText(menuSettingsBtn, Qt::AlignCenter, "⚙ SETTINGS");
 
         const int modeBtnW = 100;
         const int modeBtnH = 26;
@@ -1504,9 +1526,9 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             y += 20;
             painter.drawText(colX, y, "• Switch Difficulty : Press [1], [2], [3] or [TAB]");
             y += 20;
-            painter.drawText(colX, y, "• Audio Mute / Unmute : Press [M] or [S]");
+            painter.drawText(colX, y, "• Audio Mute / Unmute : Press [M]   •   Settings : [S] or click [⚙ SETTINGS]");
             y += 20;
-            painter.drawText(colX, y, "• Pause : [ESC]   •   Restart : [R]   •   Next Slide : [→]");
+            painter.drawText(colX, y, "• Pause : [ESC] or [P]   •   Restart : [R]   •   Next Slide : [→]");
         }
         else if (slideIndex == 2)
         {
@@ -1566,7 +1588,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         QFont navFont("Segoe UI", 10, QFont::Bold);
         painter.setFont(navFont);
         painter.setPen(QColor(255, 209, 102));
-        QString slideIndicator = QString("Page %1 of 3   •   Press [→] to see next").arg(slideIndex + 1);
+        QString slideIndicator = QString("Page %1 of 3   •   [→] Next Slide   •   [S] Settings").arg(slideIndex + 1);
         painter.drawText(QRect(cardX, cardY + cardH - 52, cardW, 20), Qt::AlignCenter, slideIndicator);
 
         QFont hintFont("Segoe UI", 11, QFont::Bold);
@@ -1622,8 +1644,16 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
 QRect GameRenderer::getPauseButtonRect(int width, int height)
 {
     Q_UNUSED(height);
-    const int sz = 36;
-    return QRect(width - sz - 16, 14, sz, sz);
+    const int sz = 32;
+    return QRect(width - sz - 14, 10, sz, sz);
+}
+
+QRect GameRenderer::getSettingsButtonRect(int width, int height)
+{
+    Q_UNUSED(height);
+    const int sz = 34;
+    const int gap = 12;
+    return QRect(width - (sz * 2) - 14 - gap, 12, sz, sz);
 }
 
 QRect GameRenderer::getVirtualLeftButtonRect(int width, int height)
@@ -1656,7 +1686,7 @@ QRect GameRenderer::getCompanionButtonRect(int width, int height)
 
 void GameRenderer::renderOnScreenControls(QPainter &painter, const GameEngine &engine, int width, int height)
 {
-    // 1. Pause Button [ ⏸ ]
+    // 1. Top-Right Pause Button [ ⏸ ]
     const QRect pauseRect = getPauseButtonRect(width, height);
     painter.setPen(QPen(QColor(0, 229, 255, 180), 1.5));
     painter.setBrush(QColor(16, 24, 38, 180));
@@ -1869,7 +1899,7 @@ void GameRenderer::renderPauseMenu(QPainter &painter, const GameEngine &engine, 
     painter.setBrush(QColor(22, 54, 38));
     painter.drawRoundedRect(btnResume, 8, 8);
     painter.setPen(QColor(46, 204, 113));
-    painter.drawText(btnResume, Qt::AlignCenter, "▶   Resume Game   [ESC]");
+    painter.drawText(btnResume, Qt::AlignCenter, "▶   Resume Game   [SPACE]");
 
     // 2. Settings Button
     const QRect btnSettings(btnX, startY + (btnH + btnGap), btnW, btnH);
@@ -1893,14 +1923,14 @@ void GameRenderer::renderPauseMenu(QPainter &painter, const GameEngine &engine, 
     painter.setBrush(QColor(56, 24, 36));
     painter.drawRoundedRect(btnMainMenu, 8, 8);
     painter.setPen(QColor(239, 71, 111));
-    painter.drawText(btnMainMenu, Qt::AlignCenter, "⌂   Main Menu (Starting Page)");
+    painter.drawText(btnMainMenu, Qt::AlignCenter, "⌂   Main Menu (End Game)   [M] / [ESC]");
 
     // Hint
     QFont hintFont("Segoe UI", 9, QFont::Normal);
     painter.setFont(hintFont);
     painter.setPen(QColor(139, 155, 180));
     painter.drawText(QRect(cardX, cardY + cardH - 26, cardW, 20), Qt::AlignCenter,
-                     "Press [ESC] to resume  •  [1-3] or [Tab] for mode  •  [R] to restart");
+                     "Press [SPACE] to resume  •  [M]/[ESC] Main Menu  •  [R] Restart");
 }
 
 void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engine, const AudioManager *audio, int scale, int width, int height)
@@ -1909,7 +1939,7 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
     painter.fillRect(0, 0, width, height, QColor(8, 12, 20, 225));
 
     const int cardW = std::min(width - 40, 560);
-    const int cardH = std::min(height - 40, 480);
+    const int cardH = std::min(height - 30, 490);
     const int cardX = (width - cardW) / 2;
     const int cardY = (height - cardH) / 2;
 
@@ -2079,9 +2109,32 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
         painter.drawText(sb, Qt::AlignCenter, scaleLabels[i]);
     }
 
+    // --- ROW 6: Game Assist (Warnings & Hazard Badges) ---
+    const int y6 = cardY + 316;
+    painter.setFont(lblFont);
+    painter.setPen(QColor(224, 230, 237));
+    painter.drawText(QRect(rowLeftX, y6, 130, 28), Qt::AlignLeft | Qt::AlignVCenter, "Game Assist:");
+
+    const bool assistOn = engine.isGameAssistEnabled();
+    const QRect btnAssistOn(rowLeftX + 130, y6, 125, 26);
+    const QRect btnAssistOff(rowLeftX + 265, y6, 125, 26);
+
+    painter.setFont(btnFont);
+    painter.setPen(QPen(assistOn ? QColor(46, 204, 113) : QColor(60, 75, 95), assistOn ? 2 : 1));
+    painter.setBrush(assistOn ? QColor(22, 54, 38) : QColor(26, 32, 44));
+    painter.drawRoundedRect(btnAssistOn, 6, 6);
+    painter.setPen(assistOn ? QColor(46, 204, 113) : QColor(160, 175, 195));
+    painter.drawText(btnAssistOn, Qt::AlignCenter, "🟢 ON (Default)");
+
+    painter.setPen(QPen(!assistOn ? QColor(255, 107, 107) : QColor(60, 75, 95), !assistOn ? 2 : 1));
+    painter.setBrush(!assistOn ? QColor(56, 24, 28) : QColor(26, 32, 44));
+    painter.drawRoundedRect(btnAssistOff, 6, 6);
+    painter.setPen(!assistOn ? QColor(255, 107, 107) : QColor(160, 175, 195));
+    painter.drawText(btnAssistOff, Qt::AlignCenter, "⚪ OFF (Pro)");
+
     // --- Keybinds Overview Panel ---
-    const int y6 = cardY + 314;
-    const QRect keyBox(rowLeftX, y6, cardW - 70, 70);
+    const int yKeys = cardY + 360;
+    const QRect keyBox(rowLeftX, yKeys, cardW - 70, 64);
     painter.setPen(QPen(QColor(42, 54, 76), 1));
     painter.setBrush(QColor(14, 18, 28, 200));
     painter.drawRoundedRect(keyBox, 8, 8);
@@ -2089,7 +2142,7 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
     QFont keyTitleFont("Segoe UI", 9, QFont::Bold);
     painter.setFont(keyTitleFont);
     painter.setPen(QColor(255, 209, 102));
-    painter.drawText(QRect(rowLeftX + 10, y6 + 6, cardW - 90, 16), Qt::AlignLeft, "QUICK CONTROLS REFERENCE:");
+    painter.drawText(QRect(rowLeftX + 10, yKeys + 6, cardW - 90, 16), Qt::AlignLeft, "QUICK CONTROLS REFERENCE:");
 
     QFont keyBodyFont("Segoe UI", 9, QFont::Normal);
     painter.setFont(keyBodyFont);
@@ -2113,15 +2166,15 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
         moveTip = "• Move: Mouse Cursor OR [A / D] / [Left / Right Arrow] Keys (speed-capped)";
     }
 
-    painter.drawText(QRect(rowLeftX + 10, y6 + 26, cardW - 90, 18), Qt::AlignLeft, moveTip);
-    painter.drawText(QRect(rowLeftX + 10, y6 + 46, cardW - 90, 18), Qt::AlignLeft,
-                     "• [H] or 🧺 Button: Growth Egg  •  [C] or 🤖 Button: Companion (Hard)  •  [ESC] or ⏸: Pause");
+    painter.drawText(QRect(rowLeftX + 10, yKeys + 24, cardW - 90, 18), Qt::AlignLeft, moveTip);
+    painter.drawText(QRect(rowLeftX + 10, yKeys + 43, cardW - 90, 18), Qt::AlignLeft,
+                     "• [H] / 🧺: Growth Egg  •  [C] / 🤖: Companion  •  [A]: Assist Toggle  •  [ESC] / ⏸: Pause");
 
     // --- Back / Done Button ---
     const int backW = 190;
     const int backH = 36;
     const int backX = cardX + (cardW - backW) / 2;
-    const int backY = cardY + cardH - 50;
+    const int backY = cardY + cardH - 46;
     const QRect btnBack(backX, backY, backW, backH);
 
     painter.setFont(QFont("Segoe UI", 11, QFont::Bold));

@@ -319,7 +319,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             redrawPixels();
             return;
         }
-        else if (key == Qt::Key_M || key == Qt::Key_S)
+        else if (key == Qt::Key_S || key == Qt::Key_O)
+        {
+            openSettings();
+            return;
+        }
+        else if (key == Qt::Key_M)
         {
             audioManager.toggleMute();
             audioManager.playSound(SoundId::UI_CLICK);
@@ -348,20 +353,35 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     }
     else if (engine.getState() == GameState::SETTINGS)
     {
-        if (key == Qt::Key_Escape || key == Qt::Key_Backspace)
+        if (key == Qt::Key_A || key == Qt::Key_G)
         {
-            togglePause();
+            engine.setGameAssistEnabled(!engine.isGameAssistEnabled());
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        else if (key == Qt::Key_Escape || key == Qt::Key_Backspace)
+        {
+            engine.setState(previousStateBeforeSettings);
+            if (previousStateBeforeSettings == GameState::PLAYING)
+            {
+                audioManager.resumeBGM();
+                lockCursorToFrame();
+            }
+            audioManager.playSound(SoundId::UI_CLICK);
+            updateHUD();
+            redrawPixels();
             return;
         }
     }
     else if (engine.getState() == GameState::PAUSED)
     {
-        if (key == Qt::Key_Escape || key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter)
+        if (key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_P)
         {
             togglePause();
             return;
         }
-        else if (key == Qt::Key_S)
+        else if (key == Qt::Key_S || key == Qt::Key_O)
         {
             openSettings();
             return;
@@ -378,10 +398,16 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         }
     }
 
-    // Toggle Pause with ESC key
-    if (key == Qt::Key_Escape)
+    // Toggle Pause with ESC, P or Space key
+    if (key == Qt::Key_Escape || key == Qt::Key_P || key == Qt::Key_Space)
     {
         togglePause();
+        return;
+    }
+
+    if (key == Qt::Key_S || key == Qt::Key_O)
+    {
+        openSettings();
         return;
     }
 
@@ -425,7 +451,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         redrawPixels();
         return;
     }
-    else if (key == Qt::Key_M || key == Qt::Key_S)
+    else if (key == Qt::Key_M)
     {
         audioManager.toggleMute();
         audioManager.playSound(SoundId::UI_CLICK);
@@ -590,8 +616,10 @@ void MainWindow::onMouseLeftClicked()
         const int modeBarY = cardY + 75;
         const int startModeX = cardX + (cardW - (modeBtnW * 3 + 20)) / 2;
 
-        // Check Settings Button on Menu Card
-        const QRect menuSettingsBtn(cardX + cardW - 105, cardY + 16, 85, 26);
+        // Check Settings Button on Menu Card (Written body: SETTINGS)
+        const int menuBtnW = 120;
+        const int menuBtnH = 30;
+        const QRect menuSettingsBtn(cardX + cardW - menuBtnW - 20, cardY + 14, menuBtnW, menuBtnH);
         if (menuSettingsBtn.contains(clickPos))
         {
             openSettings();
@@ -724,7 +752,7 @@ void MainWindow::onMouseLeftClicked()
     if (engine.getState() == GameState::SETTINGS)
     {
         const int cardW = std::min(width - 40, 560);
-        const int cardH = std::min(height - 40, 480);
+        const int cardH = std::min(height - 30, 490);
         const int cardX = (width - cardW) / 2;
         const int cardY = (height - cardH) / 2;
         const int rowLeftX = cardX + 35;
@@ -846,11 +874,30 @@ void MainWindow::onMouseLeftClicked()
             }
         }
 
+        // --- ROW 6: Game Assist ---
+        const int y6 = cardY + 316;
+        const QRect btnAssistOn(rowLeftX + 130, y6, 125, 26);
+        const QRect btnAssistOff(rowLeftX + 265, y6, 125, 26);
+        if (btnAssistOn.contains(clickPos))
+        {
+            engine.setGameAssistEnabled(true);
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        else if (btnAssistOff.contains(clickPos))
+        {
+            engine.setGameAssistEnabled(false);
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+
         // --- Back / Done Button ---
         const int backW = 190;
         const int backH = 36;
         const int backX = cardX + (cardW - backW) / 2;
-        const int backY = cardY + cardH - 50;
+        const int backY = cardY + cardH - 46;
         const QRect btnBack(backX, backY, backW, backH);
         if (btnBack.contains(clickPos))
         {
