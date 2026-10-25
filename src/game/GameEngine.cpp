@@ -1194,21 +1194,16 @@ void GameEngine::updateEggSpawn(const MyGrid &grid)
             const int maxGrowPct = (mode == GameMode::HARD ? 42 : (mode == GameMode::MEDIUM ? 46 : 50));
             const int growChance = std::min(maxGrowPct, baseGrowPct + growBonus);
 
-            const bool growCooldownPassed = (lastGrowEggMissLevel == 0 || (level - lastGrowEggMissLevel >= 2) || basket.halfWidth <= 4);
-            
+            std::uniform_int_distribution<int> growRollDist(0, 99);
+            if (growRollDist(rng) < growChance)
+            {
+                return EggType::BASKET_GROW;
+            }
+
             int goldenPct = (mode == GameMode::HARD ? 10 : (mode == GameMode::MEDIUM ? 14 : 18));
             int poopPct = (mode == GameMode::HARD ? std::min(60, 28 + tier * 3)
                                                  : (mode == GameMode::MEDIUM ? std::min(50, 20 + tier * 2)
                                                                              : std::min(45, 15 + tier * 2)));
-
-            if (growCooldownPassed)
-            {
-                std::uniform_int_distribution<int> growRollDist(0, 99);
-                if (growRollDist(rng) < growChance)
-                {
-                    return EggType::BASKET_GROW;
-                }
-            }
 
             const int regularPct = std::max(10, 100 - goldenPct - poopPct);
             std::uniform_int_distribution<int> typeDist(0, 99);
@@ -1530,10 +1525,9 @@ void GameEngine::updateFallingEggs(const MyGrid &grid)
             }
             else if (egg.type == EggType::BASKET_GROW)
             {
-                lastGrowEggMissLevel = level;
                 spawnCatchParticles(egg.mathX, groundMathY + 1, QColor(46, 204, 113), 16);
-                addFloatingText(egg.mathX, groundMathY + 3.0, "MISSED! COOLDOWN: 2 LVLS", QColor(231, 76, 60));
-                statusMessage = QString("Growth egg broke! Green eggs paused until Level %1.").arg(level + 2);
+                addFloatingText(egg.mathX, groundMathY + 3.0, "GROWTH EGG MISSED!", QColor(231, 76, 60));
+                statusMessage = "Growth egg broke on the ground! Keep catching!";
                 triggerSound(SoundId::SPLAT);
             }
             else if (egg.type == EggType::BASKET_RESTORE)
