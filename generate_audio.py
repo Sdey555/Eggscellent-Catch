@@ -451,6 +451,105 @@ def gen_bgm_cheerful():
 
     save_wav_stereo("bgm_cheerful.wav", left, right)
 
+# 16. SFX: Boss Warning (two-tone siren with a deep drum hit)
+def gen_sfx_boss_warning():
+    dur = 1.30
+    num_samples = int(dur * SAMPLE_RATE)
+    samples = []
+    random.seed(2024)
+    for i in range(num_samples):
+        t = i / SAMPLE_RATE
+        # Siren alternating between two tones, sliding between them
+        cycle = (t / 0.32) % 2.0
+        glide = cycle if cycle < 1.0 else 2.0 - cycle
+        freq = 330.0 + 150.0 * (glide * glide * (3.0 - 2.0 * glide))
+        ph = (freq * t) % 1.0
+        saw = 2.0 * ph - 1.0
+        siren = (0.55 * math.sin(2.0 * math.pi * freq * t) + 0.25 * saw) * min(1.0, t / 0.05) * math.exp(-max(0.0, t - 0.9) * 8.0)
+        # Deep drum hit at the start
+        drum_f = 90.0 * math.exp(-t * 7.0) + 38.0
+        drum = 0.9 * math.sin(2.0 * math.pi * drum_f * t) * math.exp(-t * 6.0)
+        samples.append(siren * 0.45 + drum)
+    save_wav_mono("sfx_boss_warning.wav", samples)
+
+# 17. SFX: Boss Hit (punchy thud + metallic zing)
+def gen_sfx_boss_hit():
+    dur = 0.28
+    num_samples = int(dur * SAMPLE_RATE)
+    samples = []
+    random.seed(31)
+    for i in range(num_samples):
+        t = i / SAMPLE_RATE
+        thud = 0.8 * math.sin(2.0 * math.pi * (140.0 * math.exp(-t * 22.0) + 55.0) * t) * math.exp(-t * 14.0)
+        zing = 0.35 * math.sin(2.0 * math.pi * 1480.0 * t + 3.0 * math.sin(2.0 * math.pi * 311.0 * t)) * math.exp(-t * 20.0)
+        crack = (random.random() * 2.0 - 1.0) * math.exp(-t * 60.0) * 0.5
+        samples.append(thud + zing + crack)
+    save_wav_mono("sfx_boss_hit.wav", samples)
+
+# 18. SFX: Boss Defeated (explosion rumble + triumphant fanfare)
+def gen_sfx_boss_defeat():
+    dur = 2.20
+    num_samples = int(dur * SAMPLE_RATE)
+    samples = []
+    random.seed(55)
+    rumble_filter = 0.0
+    fanfare = [
+        (note_freq(NOTES['C5']), 0.45, 0.30), (note_freq(NOTES['E5']), 0.60, 0.30),
+        (note_freq(NOTES['G5']), 0.75, 0.30), (note_freq(NOTES['C6']), 0.90, 0.60),
+        (note_freq(NOTES['E6']), 1.10, 0.60), (note_freq(NOTES['G6']), 1.30, 0.80),
+    ]
+    for i in range(num_samples):
+        t = i / SAMPLE_RATE
+        white = random.random() * 2.0 - 1.0
+        rumble_filter = 0.93 * rumble_filter + 0.07 * white
+        boom = (rumble_filter * 0.9 + 0.5 * math.sin(2.0 * math.pi * (60.0 * math.exp(-t * 2.0) + 35.0) * t)) * math.exp(-t * 2.6)
+        val = boom * 0.8
+        for f, st, nd in fanfare:
+            if t >= st:
+                lt = t - st
+                env = math.exp(-lt * 3.2) * min(1.0, lt / 0.01)
+                val += (0.6 * math.sin(2.0 * math.pi * f * lt) + 0.25 * math.sin(4.0 * math.pi * f * lt) + 0.1 * math.sin(6.0 * math.pi * f * lt)) * env * 0.26
+        samples.append(val)
+    save_wav_mono("sfx_boss_defeat.wav", samples)
+
+# 19. SFX: Wind Gust (swelling band-passed noise with a sweeping whistle)
+def gen_sfx_wind_gust():
+    dur = 1.60
+    num_samples = int(dur * SAMPLE_RATE)
+    samples = []
+    random.seed(8)
+    lp = 0.0
+    lp2 = 0.0
+    for i in range(num_samples):
+        t = i / SAMPLE_RATE
+        swell = math.sin(math.pi * min(1.0, t / dur)) ** 1.6
+        white = random.random() * 2.0 - 1.0
+        k = 0.05 + 0.10 * swell
+        lp += k * (white - lp)
+        lp2 += 0.5 * (lp - lp2)
+        whistle = 0.06 * math.sin(2.0 * math.pi * (520.0 + 260.0 * swell) * t) * swell
+        samples.append((lp2 * 3.4 + whistle) * swell * 0.8)
+    save_wav_mono("sfx_wind_gust.wav", samples)
+
+# 20. SFX: Frost Form (crystalline chimes + icy shimmer)
+def gen_sfx_frost_form():
+    dur = 0.60
+    num_samples = int(dur * SAMPLE_RATE)
+    samples = []
+    random.seed(64)
+    chimes = [note_freq(NOTES['E6']), note_freq(NOTES['B6']), note_freq(NOTES['G6']), note_freq(NOTES['E7'])]
+    for i in range(num_samples):
+        t = i / SAMPLE_RATE
+        val = 0.0
+        for idx, f in enumerate(chimes):
+            st = idx * 0.06
+            if t >= st:
+                lt = t - st
+                val += (math.sin(2.0 * math.pi * f * lt) + 0.3 * math.sin(2.0 * math.pi * f * 2.76 * lt)) * math.exp(-lt * 9.0) * 0.22
+        shimmer = (random.random() * 2.0 - 1.0) * math.exp(-t * 16.0) * 0.10 * (1.0 if random.random() < 0.4 else 0.0)
+        samples.append(val + shimmer)
+    save_wav_mono("sfx_frost_form.wav", samples)
+
 def main():
     print("Synthesizing Game Sound Effects & Chill BGM...")
     gen_sfx_catch_regular()
@@ -467,6 +566,11 @@ def main():
     gen_sfx_grow_use()
     gen_sfx_companion_spawn()
     gen_sfx_ui_click()
+    gen_sfx_boss_warning()
+    gen_sfx_boss_hit()
+    gen_sfx_boss_defeat()
+    gen_sfx_wind_gust()
+    gen_sfx_frost_form()
     gen_bgm_cheerful()
     print("All audio files successfully generated in 'audio/' folder!")
 

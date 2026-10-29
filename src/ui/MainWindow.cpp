@@ -130,7 +130,7 @@ void MainWindow::unlockCursor()
 
 void MainWindow::nextMenuSlide()
 {
-    menuSlideIndex = (menuSlideIndex + 1) % 3;
+    menuSlideIndex = (menuSlideIndex + 1) % 4;
     engine.setMenuSlideIndex(menuSlideIndex);
     audioManager.playSound(SoundId::UI_CLICK);
     redrawPixels();
@@ -138,7 +138,7 @@ void MainWindow::nextMenuSlide()
 
 void MainWindow::prevMenuSlide()
 {
-    menuSlideIndex = (menuSlideIndex + 2) % 3;
+    menuSlideIndex = (menuSlideIndex + 3) % 4;
     engine.setMenuSlideIndex(menuSlideIndex);
     audioManager.playSound(SoundId::UI_CLICK);
     redrawPixels();
@@ -334,12 +334,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             redrawPixels();
             return;
         }
-        else if (key == Qt::Key_S || key == Qt::Key_O)
-        {
-            openSettings();
-            return;
-        }
-        else if (key == Qt::Key_M)
+        else if (key == Qt::Key_M || key == Qt::Key_S)
         {
             audioManager.toggleMute();
             audioManager.playSound(SoundId::UI_CLICK);
@@ -383,35 +378,20 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     }
     else if (engine.getState() == GameState::SETTINGS)
     {
-        if (key == Qt::Key_A || key == Qt::Key_G)
+        if (key == Qt::Key_Escape || key == Qt::Key_Backspace || key == Qt::Key_Back)
         {
-            engine.setGameAssistEnabled(!engine.isGameAssistEnabled());
-            audioManager.playSound(SoundId::UI_CLICK);
-            redrawPixels();
-            return;
-        }
-        else if (key == Qt::Key_Escape || key == Qt::Key_Backspace || key == Qt::Key_Back)
-        {
-            engine.setState(previousStateBeforeSettings);
-            if (previousStateBeforeSettings == GameState::PLAYING)
-            {
-                audioManager.resumeBGM();
-                lockCursorToFrame();
-            }
-            audioManager.playSound(SoundId::UI_CLICK);
-            updateHUD();
-            redrawPixels();
+            togglePause();
             return;
         }
     }
     else if (engine.getState() == GameState::PAUSED)
     {
-        if (key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_P)
+        if (key == Qt::Key_Escape || key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter)
         {
             togglePause();
             return;
         }
-        else if (key == Qt::Key_S || key == Qt::Key_O)
+        else if (key == Qt::Key_S)
         {
             openSettings();
             return;
@@ -433,16 +413,17 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         }
     }
 
-    // Toggle Pause with ESC, P or Space key
-    if (key == Qt::Key_Escape || key == Qt::Key_P || key == Qt::Key_Space)
+    // Toggle Pause with ESC key
+    if (key == Qt::Key_Escape)
     {
         togglePause();
         return;
     }
 
-    if (key == Qt::Key_S || key == Qt::Key_O)
+    if (key == Qt::Key_Space || key == Qt::Key_Down || key == Qt::Key_B || key == Qt::Key_F)
     {
-        openSettings();
+        engine.defend();
+        redrawPixels();
         return;
     }
 
@@ -486,7 +467,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         redrawPixels();
         return;
     }
-    else if (key == Qt::Key_M)
+    else if (key == Qt::Key_M || key == Qt::Key_S)
     {
         audioManager.toggleMute();
         audioManager.playSound(SoundId::UI_CLICK);
@@ -938,13 +919,13 @@ void MainWindow::onMouseLeftClicked()
         }
 
         const int cardW = std::min(width - 40, 560);
-        const int cardH = std::min(height - 40, 360);
+        const int cardH = std::min(height - 40, 350);
         const int cardX = (width - cardW) / 2;
         const int cardY = (height - cardH) / 2;
 
         const int contentTop = cardY + 52;
         const int viewportH = cardH - 60;
-        const int totalContentH = 330;
+        const int totalContentH = 325;
         const int maxScroll = std::max(0, totalContentH - viewportH);
         const int scrollY = std::clamp(engine.getSettingsScrollY(), 0, maxScroll);
 
@@ -1080,25 +1061,6 @@ void MainWindow::onMouseLeftClicked()
                     return;
                 }
             }
-
-            // --- ROW 6: Game Assist ---
-            const int y6 = contentTop + 208;
-            const QRect btnAssistOn(rowLeftX + 130, y6, 125, 26);
-            const QRect btnAssistOff(rowLeftX + 265, y6, 125, 26);
-            if (btnAssistOn.contains(logicalPos))
-            {
-                engine.setGameAssistEnabled(true);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
-                return;
-            }
-            else if (btnAssistOff.contains(logicalPos))
-            {
-                engine.setGameAssistEnabled(false);
-                audioManager.playSound(SoundId::UI_CLICK);
-                redrawPixels();
-                return;
-            }
         }
 
         // Clicking anywhere inside the card frame outside buttons does nothing
@@ -1122,6 +1084,44 @@ void MainWindow::onMouseLeftClicked()
     }
 
     // 5. PLAYING STATE
+    // 5.0 Defend Button [ 🛡️ DEFEND ] or direct tap on basket/attacking bird
+    const QRect defRect = GameRenderer::getDefendButtonRect(width, height);
+    if (defRect.contains(clickPos))
+    {
+        engine.defend();
+        redrawPixels();
+        return;
+    }
+
+    // Direct tap on the basket or attacking bird triggers defense
+    const int basketScreenX = myGrid.mathToScreenX(static_cast<int>(std::round(engine.getBasket().mathX)));
+    const int basketScreenY = myGrid.mathToScreenY(engine.getBasket().mathY);
+    const int basketW = std::max(40, engine.getBasket().halfWidth * 2 * scale);
+    const int basketH = std::max(28, engine.getBasket().height * scale);
+    const QRect basketHitArea(basketScreenX - basketW / 2, basketScreenY - basketH, basketW, basketH + scale * 4);
+    if (basketHitArea.contains(clickPos))
+    {
+        engine.defend();
+        redrawPixels();
+        return;
+    }
+
+    for (const auto &bird : engine.getBirds())
+    {
+        if (bird.attackState == Bird::AttackState::TELEGRAPH || bird.attackState == Bird::AttackState::DIVE)
+        {
+            const int bsx = myGrid.mathToScreenX(static_cast<int>(std::round(bird.mathX)));
+            const int bsy = myGrid.mathToScreenY(static_cast<int>(std::round(bird.mathY)));
+            const QRect birdHitArea(bsx - scale * 8, bsy - scale * 6, scale * 16, scale * 14);
+            if (birdHitArea.contains(clickPos))
+            {
+                engine.defend();
+                redrawPixels();
+                return;
+            }
+        }
+    }
+
     // 5.1 Pause Button
     const QRect pauseRect = GameRenderer::getPauseButtonRect(width, height);
     if (pauseRect.contains(clickPos))
@@ -1194,5 +1194,11 @@ void MainWindow::onMouseLeftReleased()
 
 void MainWindow::onMouseRightClicked()
 {
+    if (engine.getState() == GameState::PLAYING)
+    {
+        engine.defend();
+        redrawPixels();
+        return;
+    }
     togglePause();
 }

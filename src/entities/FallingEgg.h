@@ -14,6 +14,11 @@ struct FallingEgg {
     EggType type = EggType::REGULAR;
     bool active = false;
     int animTick = 0;
+    double vx = 0.0;           // horizontal drift (boss volleys fan out; wind adds on top of this)
+    bool bossShot = false;     // Laid by a boss: catching it damages the boss
+    bool telegraphed = false;  // Real boss egg beacon & ground landing indicator
+    PatchType patchOnLand = PatchType::SLIME; // Hazard a boss poop leaves where it lands
+    bool leavesPatch = false;  // Force a patch on landing (boss poop), regardless of mode
 };
 
 void rasterizeEgg(MyPixels &pixels, const FallingEgg &egg);

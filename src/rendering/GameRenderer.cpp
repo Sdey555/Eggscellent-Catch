@@ -6,10 +6,12 @@
 #include "PixelFont.h"
 #include "Basket.h"
 #include "Bird.h"
+#include "Boss.h"
 #include "FallingEgg.h"
 #include "GameTypes.h"
 #include "Particle.h"
 #include <QRadialGradient>
+#include <QLinearGradient>
 #include <QFont>
 #include <QRect>
 #include <algorithm>
@@ -114,8 +116,9 @@ void GameRenderer::rasterizePixelHearts(MyPixels &pixels, int startX, int startY
 void GameRenderer::rasterizeLevelBar(MyPixels &pixels, int minX, int maxX, int topY, int level, int score, int hudTick)
 {
     const bool maxed = level >= GameEngine::MAX_LEVEL;
-    const int levelStart = (level - 1) * GameEngine::POINTS_PER_LEVEL;
-    const int earned = maxed ? GameEngine::POINTS_PER_LEVEL : std::clamp(score - levelStart, 0, GameEngine::POINTS_PER_LEVEL);
+    const int levelStart = GameEngine::levelStartScore(level);
+    const int levelLen = GameEngine::levelLength(level);
+    const int earned = maxed ? levelLen : std::clamp(score - levelStart, 0, levelLen);
 
     int barX0 = minX;
     int barX1 = maxX;
@@ -144,7 +147,7 @@ void GameRenderer::rasterizeLevelBar(MyPixels &pixels, int minX, int maxX, int t
     const int innerX0 = barX0 + 1;
     const int innerX1 = barX1 - 1;
     const int innerW = innerX1 - innerX0 + 1;
-    const int filledW = (innerW * earned) / GameEngine::POINTS_PER_LEVEL;
+    const int filledW = (innerW * earned) / levelLen;
     const int shimmerX = innerX0 + (filledW > 0 ? (hudTick / 2) % (filledW + 8) : -100);
 
     for (int i = 0; i < innerW; ++i)
@@ -456,9 +459,8 @@ void GameRenderer::renderPixelSky(QPainter &painter, const MyGrid &grid, int sca
 }
 
 void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
-                                    int minMathX, int maxMathX, int maxMathY, int hudTick,
-                                    double dayNightProgress, double nightRatio, bool isStorm,
-                                    int passType)
+                                    int minMathX, int maxMathX, int maxMathY, int cloudTick,
+                                    double dayNightProgress, double nightRatio, bool isStorm)
 {
     Q_UNUSED(width);
     Q_UNUSED(height);
@@ -499,12 +501,10 @@ void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int 
         cUnderbelly = QColor(26, 28, 40);
     }
 
-    for (size_t i = 0; i < std::size(GAME_CLOUDS); ++i)
+    for (int i = 0; i < NUM_CLOUD_BANKS; ++i)
     {
-        const auto &cd = GAME_CLOUDS[i];
-        if (passType == 1 && cd.isForeground) continue;
-        if (passType == 2 && !cd.isForeground) continue;
-        const int cx = minMathX - 45 + ((hudTick / cd.speedDivider) + cd.tickOffset) % mathSpan;
+        const auto &cd = getCloudDef(i);
+        const int cx = minMathX - 45 + ((cloudTick / cd.speedDivider) + cd.tickOffset) % mathSpan;
         const int cy = maxMathY + cd.relY;
 
         for (int col = 0; col < cd.width; ++col)
@@ -527,10 +527,6 @@ void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int 
             {
                 const int mx = cx + col;
                 const int my = cy + r;
-                if (passType == 2 && my >= maxMathY - 5)
-                {
-                    continue; // Keep top HUD ribbon (Hearts and Level Bar) fully clear
-                }
                 QColor pixCol = cBody;
                 if (r >= domeH - 2)
                 {
@@ -879,26 +875,327 @@ void GameRenderer::renderStickyPuddles(QPainter &painter, const MyGrid &grid, in
 
     for (const auto &puddle : puddles)
     {
-        const int x0 = static_cast<int>(std::round(puddle.mathX - puddle.radius));
-        const int x1 = static_cast<int>(std::round(puddle.mathX + puddle.radius));
+        const double rad = puddle.currentRadius();
+        if (rad < 0.5) continue;
+
+        const int x0 = static_cast<int>(std::round(puddle.mathX - rad));
+        const int x1 = static_cast<int>(std::round(puddle.mathX + rad));
+        // Mud and ice fade out as they melt away; slime keeps its original look
+        const int alpha = (puddle.type == PatchType::SLIME)
+                              ? 255
+                              : static_cast<int>(255.0 * std::clamp(puddle.lifeTicks / static_cast<double>(StickyPuddle::MELT_TICKS), 0.0, 1.0));
 
         for (int px = x0; px <= x1; ++px)
         {
-            const double normDist = std::abs(px - puddle.mathX) / std::max(1.0, puddle.radius);
+            const double normDist = std::abs(px - puddle.mathX) / std::max(1.0, rad);
             if (normDist > 1.0) continue;
-
-            const bool bubble = ((hudTick / 4 + px * 3) % 5 == 0);
-            const QColor slimeBase(85, 107, 47);
-            const QColor slimeDark(55, 75, 30);
-            const QColor slimeGlint(139, 195, 74);
 
             const int sx = grid.mathToScreenX(px);
             const int syTop = grid.mathToScreenY(groundMathY + 1);
             const int syMid = grid.mathToScreenY(groundMathY);
 
-            painter.fillRect(sx, syTop, scale, scale, bubble ? slimeGlint : slimeBase);
-            painter.fillRect(sx, syMid, scale, scale, slimeDark);
+            if (puddle.type == PatchType::SLIME)
+            {
+                const bool bubble = ((hudTick / 4 + px * 3) % 5 == 0);
+                const QColor slimeBase(85, 107, 47);
+                const QColor slimeDark(55, 75, 30);
+                const QColor slimeGlint(139, 195, 74);
+                painter.fillRect(sx, syTop, scale, scale, bubble ? slimeGlint : slimeBase);
+                painter.fillRect(sx, syMid, scale, scale, slimeDark);
+            }
+            else if (puddle.type == PatchType::MUD)
+            {
+                // Rain-soaked mud: dark, glossy and bubbling. While forming it is only a damp stain.
+                const bool bubble = ((hudTick / 5 + px * 5) % 7 == 0);
+                QColor top = bubble ? QColor(158, 116, 82) : (((px + puddle.ageTicks / 12) % 3 == 0) ? QColor(104, 74, 52) : QColor(86, 60, 42));
+                QColor mid(52, 36, 26);
+                if (normDist > 0.8) top = QColor(122, 92, 68);
+                const int a = puddle.isForming() ? std::min(alpha, 140) : alpha;
+                top.setAlpha(a);
+                mid.setAlpha(a);
+                painter.fillRect(sx, syTop, scale, scale, top);
+                painter.fillRect(sx, syMid, scale, scale, mid);
+            }
+            else // ICE
+            {
+                // Glassy frost: bright glints sweep across it; sparkles rise while it is forming
+                const bool glint = ((hudTick / 3 + px * 2) % 11 == 0);
+                QColor top = glint ? QColor(255, 255, 255) : (normDist > 0.75 ? QColor(150, 215, 240) : QColor(190, 238, 252));
+                QColor mid(110, 190, 224);
+                const int a = puddle.isForming() ? std::min(alpha, 170) : alpha;
+                top.setAlpha(a);
+                mid.setAlpha(a);
+                painter.fillRect(sx, syTop, scale, scale, top);
+                painter.fillRect(sx, syMid, scale, scale, mid);
+                if (normDist < 0.5)
+                {
+                    QColor dome(224, 248, 255);
+                    dome.setAlpha(a);
+                    painter.fillRect(sx, grid.mathToScreenY(groundMathY + 2), scale, scale, dome);
+                }
+                if (puddle.isForming() && (hudTick + px) % 4 == 0)
+                {
+                    painter.fillRect(sx, grid.mathToScreenY(groundMathY + 3 + (hudTick / 2 + px) % 3), scale, scale, QColor(255, 255, 255, 220));
+                }
+            }
         }
+    }
+}
+
+// -------------------------------------------------------------
+// Gameplay weather overlays
+// -------------------------------------------------------------
+void GameRenderer::renderWeatherOverlays(QPainter &painter, const GameEngine &engine, const MyGrid &grid,
+                                         int scale, int width, int height, int minMathX, int maxMathX, int hudTick)
+{
+    const double wind = engine.getWind();
+    const double wet = engine.getWetness();
+    const int groundY = engine.getGroundMathY();
+    const int maxMathY = grid.screenToMathY(0);
+
+    // --- Rain shower (thunderstorms draw their own heavier rain) ---
+    if (engine.isRainShowerActive() && !engine.isThunderstormActive())
+    {
+        const int slantPx = static_cast<int>(std::round((wind * 0.8 - 0.30) * scale));
+        const int totalFallH = std::max(20, maxMathY - groundY);
+        for (int rx = minMathX; rx <= maxMathX; rx += 6)
+        {
+            const int offset = (hudTick * 3 + ((rx * 29) % 83)) % totalFallH;
+            const int ry = maxMathY - offset;
+            const int sx = grid.mathToScreenX(rx);
+            const int sy = grid.mathToScreenY(ry);
+            for (int k = 0; k < 3; ++k)
+            {
+                painter.fillRect(sx + k * slantPx, sy + k * scale, std::max(2, scale * 2 / 3), scale, QColor(190, 218, 245, 165));
+            }
+        }
+    }
+
+    // --- Gloomy tint + puddle shimmer while the ground is wet ---
+    if (wet > 0.02)
+    {
+        painter.fillRect(0, 0, width, height, QColor(22, 34, 62, static_cast<int>(46 * wet)));
+        const int gy = grid.mathToScreenY(groundY + 1);
+        for (int px = minMathX; px <= maxMathX; px += 3)
+        {
+            if ((px * 13 + hudTick / 5) % 9 == 0)
+            {
+                painter.fillRect(grid.mathToScreenX(px), gy, scale * 2, std::max(1, scale / 2), QColor(214, 236, 255, static_cast<int>(110 * wet)));
+            }
+        }
+    }
+
+    // --- Wind: streaks race across the sky, direction and density follow the gale ---
+    const double aw = std::abs(wind);
+    if (aw > 0.06)
+    {
+        const int dir = wind > 0 ? 1 : -1;
+        const int streaks = 6 + static_cast<int>(aw * 18);
+        const int skyTop = grid.mathToScreenY(maxMathY - 6);
+        const int skyBot = grid.mathToScreenY(groundY + 14);
+        for (int i = 0; i < streaks; ++i)
+        {
+            const int h = (i * 7919 + 13) % 1000;
+            const int y = skyTop + (skyBot - skyTop) * ((i * 211 + h) % 100) / 100;
+            const int len = 36 + (h % 60) + static_cast<int>(aw * 40);
+            const int speed = 7 + static_cast<int>(aw * 16) + (h % 5);
+            const int cycle = width + 260;
+            int x = (hudTick * speed * dir + i * 197) % cycle;
+            if (x < 0) x += cycle;
+            x -= 130;
+            const int a = static_cast<int>(70 + 110 * aw);
+            painter.fillRect(dir > 0 ? x - len : x, y, len, std::max(2, scale * 2 / 3), QColor(235, 246, 255, a));
+        }
+    }
+
+    // --- Gust warning: chevrons flash on the edge the wind will arrive from ---
+    if (engine.getWindPhase() == WindPhase::WARNING)
+    {
+        const double dir = engine.getWindIncomingDirection();
+        const bool on = (hudTick / 4) % 2 == 0;
+        if (on)
+        {
+            QFont f("Segoe UI", 30, QFont::Black);
+            painter.setFont(f);
+            const QString arrows = dir > 0 ? "▶▶▶" : "◀◀◀";
+            const QRect r(dir > 0 ? 12 : width - 160, height / 3, 148, 50);
+            painter.setPen(QColor(0, 0, 0, 120));
+            painter.drawText(r.translated(2, 2), Qt::AlignCenter, arrows);
+            painter.setPen(QColor(200, 232, 255, 230));
+            painter.drawText(r, Qt::AlignCenter, arrows);
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// Night fog
+// -------------------------------------------------------------
+void GameRenderer::renderFog(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
+                             int groundMathY, double density, int hudTick)
+{
+    Q_UNUSED(height);
+    if (density < 0.02) return;
+
+    // Fog reaches down to a "fog line" above the ground; below it the air is clear
+    const int fogBottom = grid.mathToScreenY(groundMathY + 40);
+    if (fogBottom <= 0) return;
+
+    const int aTop = static_cast<int>(std::min(235.0, density * 255.0 * 0.92));
+    QLinearGradient grad(0, 0, 0, fogBottom);
+    grad.setColorAt(0.0, QColor(196, 208, 226, aTop));
+    grad.setColorAt(0.55, QColor(196, 208, 226, static_cast<int>(aTop * 0.78)));
+    grad.setColorAt(1.0, QColor(196, 208, 226, 0));
+    painter.fillRect(0, 0, width, fogBottom, grad);
+
+    // Drifting chunky wisps so the fog feels alive
+    const int bandH = scale * 3;
+    for (int k = 0; k < 7; ++k)
+    {
+        const int dir = (k % 2 == 0) ? 1 : -1;
+        const int cycle = width + 500;
+        int x = static_cast<int>(hudTick * (0.35 + 0.08 * k)) * dir + k * 233;
+        x %= cycle;
+        if (x < 0) x += cycle;
+        x -= 250;
+        const int y = fogBottom * (k + 1) / 9;
+        const int w = 200 + k * 34;
+        const int a = static_cast<int>(70 * density * (1.0 - static_cast<double>(k) / 10.0));
+        painter.fillRect(x, y, w, bandH, QColor(232, 238, 248, a));
+        painter.fillRect(x + w / 5, y - bandH / 2, w * 3 / 5, bandH / 2, QColor(232, 238, 248, a * 3 / 4));
+    }
+}
+
+// -------------------------------------------------------------
+// Boss HUD: health bar + warning / victory banners
+// -------------------------------------------------------------
+void GameRenderer::renderBossHud(QPainter &painter, const GameEngine &engine, int width, int height, int hudTick)
+{
+    const BossPhase phase = engine.getBossPhase();
+    const BossBird &boss = engine.getBoss();
+    if (!boss.present || !boss.def) return;
+
+    const BossPalette &pal = boss.def->pal;
+
+    // ---------- Health bar ----------
+    const int barW = std::min(static_cast<int>(width * 0.46), 420);
+    const int barH = 14;
+    const int barX = (width - barW) / 2;
+    const int barY = 30;
+
+    double ratio = static_cast<double>(boss.hp) / std::max(1, boss.maxHp);
+    if (phase == BossPhase::INTRO)
+    {
+        ratio = std::min(1.0, engine.getBossPhaseTicks() / 70.0);   // bar fills while the boss arrives
+    }
+
+    QFont nameFont("Segoe UI", 10, QFont::Black);
+    painter.setFont(nameFont);
+    const QString nameStr = QString("%1%2").arg(QString::fromUtf8(boss.def->name), boss.enraged ? "  💢 ENRAGED" : "");
+    const QRect nameRect(barX, barY - 20, barW, 18);
+    painter.setPen(QColor(0, 0, 0, 200));
+    painter.drawText(nameRect.translated(1, 1), Qt::AlignCenter, nameStr);
+    painter.setPen(boss.enraged ? QColor(255, 110, 110) : QColor(255, 236, 179));
+    painter.drawText(nameRect, Qt::AlignCenter, nameStr);
+
+    painter.setPen(QPen(QColor(10, 12, 20), 2));
+    painter.setBrush(QColor(28, 20, 28, 230));
+    painter.drawRoundedRect(barX - 2, barY - 2, barW + 4, barH + 4, 5, 5);
+
+    const int fillW = static_cast<int>(barW * ratio);
+    QColor fillA = boss.enraged ? QColor(255, 82, 82) : (ratio > 0.6 ? QColor(46, 204, 113) : QColor(255, 183, 3));
+    QColor fillB = boss.enraged ? QColor(183, 28, 28) : (ratio > 0.6 ? QColor(20, 140, 80) : QColor(214, 120, 0));
+    if (boss.hurtFlash > 0 && boss.hurtFlash % 2 == 1)
+    {
+        fillA = QColor(255, 255, 255);
+        fillB = QColor(255, 236, 179);
+    }
+    if (fillW > 0)
+    {
+        QLinearGradient g(0, barY, 0, barY + barH);
+        g.setColorAt(0.0, fillA);
+        g.setColorAt(1.0, fillB);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(g);
+        painter.drawRoundedRect(barX, barY, fillW, barH, 3, 3);
+    }
+
+    // HP ticks and the rage threshold notch (40%)
+    painter.setPen(QColor(0, 0, 0, 90));
+    if (boss.maxHp <= 30)
+    {
+        for (int i = 1; i < boss.maxHp; ++i)
+        {
+            const int tx = barX + barW * i / boss.maxHp;
+            painter.drawLine(tx, barY + 1, tx, barY + barH - 1);
+        }
+    }
+    const int rageX = barX + static_cast<int>(barW * 0.40);
+    painter.setPen(QPen(boss.enraged ? QColor(255, 255, 255, 220) : QColor(255, 120, 120, 230), 2));
+    painter.drawLine(rageX, barY - 4, rageX, barY + barH + 3);
+
+    QFont hpFont("Segoe UI", 8, QFont::Bold);
+    painter.setFont(hpFont);
+    const QString hpStr = QString("%1 / %2").arg(std::max(0, boss.hp)).arg(boss.maxHp);
+    painter.setPen(QColor(0, 0, 0, 200));
+    painter.drawText(QRect(barX + 1, barY + 1, barW, barH), Qt::AlignCenter, hpStr);
+    painter.setPen(QColor(255, 255, 255));
+    painter.drawText(QRect(barX, barY, barW, barH), Qt::AlignCenter, hpStr);
+
+    // ---------- Banners ----------
+    const int ticks = engine.getBossBannerTicks();
+    if (phase == BossPhase::INTRO && ticks > 0)
+    {
+        const int total = engine.getBossBannerMax();
+        const int fadeIn = std::min(1.0, (total - ticks) / 10.0) * 255;
+        const int fadeOut = std::min(1.0, ticks / 15.0) * 255;
+        const int alpha = std::min(fadeIn, fadeOut);
+
+        // pulsing red edge vignette
+        const int pulse = static_cast<int>(70 + 60 * std::sin(hudTick * 0.35));
+        QRadialGradient vg(width / 2.0, height / 2.0, std::max(width, height) * 0.7);
+        vg.setColorAt(0.55, QColor(200, 0, 0, 0));
+        vg.setColorAt(1.0, QColor(200, 0, 0, pulse * alpha / 255));
+        painter.fillRect(0, 0, width, height, vg);
+
+        const bool blink = (hudTick / 5) % 2 == 0;
+        QFont warnFont("Segoe UI", 30, QFont::Black);
+        painter.setFont(warnFont);
+        const QRect warnRect(0, height / 3 - 56, width, 56);
+        painter.setPen(QColor(0, 0, 0, alpha * 2 / 3));
+        painter.drawText(warnRect.translated(3, 3), Qt::AlignCenter, "⚠ WARNING ⚠");
+        painter.setPen(blink ? QColor(255, 82, 82, alpha) : QColor(255, 214, 10, alpha));
+        painter.drawText(warnRect, Qt::AlignCenter, "⚠ WARNING ⚠");
+
+        QFont bossFont("Segoe UI", 24, QFont::Black);
+        painter.setFont(bossFont);
+        const QRect bossRect(0, height / 3, width, 44);
+        painter.setPen(QColor(0, 0, 0, alpha * 2 / 3));
+        painter.drawText(bossRect.translated(3, 3), Qt::AlignCenter, QString::fromUtf8(boss.def->name));
+        QColor nc = pal.crestLight;
+        nc.setAlpha(alpha);
+        painter.setPen(nc);
+        painter.drawText(bossRect, Qt::AlignCenter, QString::fromUtf8(boss.def->name));
+
+        QFont titleFont("Segoe UI", 13, QFont::DemiBold);
+        painter.setFont(titleFont);
+        painter.setPen(QColor(224, 230, 237, alpha));
+        painter.drawText(QRect(0, height / 3 + 46, width, 26), Qt::AlignCenter, QString::fromUtf8(boss.def->title));
+    }
+    else if (phase == BossPhase::DEFEATED && ticks > 0)
+    {
+        const int alpha = std::min(255, ticks * 8);
+        QFont f("Segoe UI", 32, QFont::Black);
+        painter.setFont(f);
+        const QRect r(0, height / 3 - 30, width, 60);
+        painter.setPen(QColor(0, 0, 0, alpha * 2 / 3));
+        painter.drawText(r.translated(3, 3), Qt::AlignCenter, "🏆 BOSS DEFEATED! 🏆");
+        painter.setPen(QColor(255, 214, 10, alpha));
+        painter.drawText(r, Qt::AlignCenter, "🏆 BOSS DEFEATED! 🏆");
+
+        QFont sf("Segoe UI", 13, QFont::DemiBold);
+        painter.setFont(sf);
+        painter.setPen(QColor(224, 230, 237, alpha));
+        painter.drawText(QRect(0, height / 3 + 32, width, 26), Qt::AlignCenter, "Catch the 👑 Trophy Egg!");
     }
 }
 
@@ -940,25 +1237,78 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     renderPixelSky(painter, grid, scale, width, height, minMathX, maxMathX, minMathY, maxMathY,
                    engine.getGroundMathY(), dnProg, nightRatio, isStorm, flashTicks, hudTick);
 
-    // 2. Grand drifting pixel clouds (rendered in background when not storming)
-    if (!isStorm)
-    {
-        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, engine.getDayNightTick(),
-                          dnProg, nightRatio, isStorm, /*passType=*/1);
-    }
-
-    // 3. Mountains & Hills (with ZERO gaps, fills completely to groundMathY)
+    // 2. Mountains & Hills (with ZERO gaps, fills completely to groundMathY)
     renderPixelHills(painter, grid, scale, width, height, minMathX, maxMathX, engine.getGroundMathY(),
                      dnProg, nightRatio, isStorm);
 
-    // 4. Farmhouse & barn elevated on midground knoll
+    // 3. Farmhouse & barn elevated on midground knoll
     renderPixelFarmhouse(painter, grid, scale, width, height, engine.getGroundMathY(), hudTick,
                          dnProg, nightRatio, isStorm);
 
-    // 5. Rustic wooden fence
+    // 4. Rustic wooden fence
     renderPixelFence(painter, grid, scale, width, height, minMathX, maxMathX, engine.getGroundMathY(),
                      dnProg, nightRatio, isStorm);
 
+    // 5. Sticky Poop Puddles on the ground
+    renderStickyPuddles(painter, grid, scale, width, height, engine.getStickyPuddles(), engine.getGroundMathY(), hudTick);
+
+    // -------------------------------------------------------------
+    // MIDGROUND: BIRDS PASS (Rendered behind drifting clouds)
+    // -------------------------------------------------------------
+    MyPixels birdPixels;
+
+    for (const auto &bird : engine.getBirds())
+    {
+        rasterizeBird(birdPixels, bird);
+    }
+
+    if (engine.isLegendaryBirdActive())
+    {
+        rasterizeBird(birdPixels, engine.getLegendaryBird());
+    }
+
+    if (engine.getBoss().present)
+    {
+        rasterizeBossBird(birdPixels, engine.getBoss());
+    }
+
+    for (const auto &entry : birdPixels.getPixelMap())
+    {
+        const int x = static_cast<int>(entry.first >> 32);
+        const int y = static_cast<int>(entry.first & 0xFFFFFFFFLL);
+        paintCell(painter, grid, scale, width, height, x, y, entry.second);
+    }
+
+    // -------------------------------------------------------------
+    // BIRD ATTACK TELEGRAPH BEAM & GROUND TARGET RETICLE
+    // -------------------------------------------------------------
+    for (const auto &bird : engine.getBirds())
+    {
+        if (bird.attackState == Bird::AttackState::TELEGRAPH)
+        {
+            const int bx = grid.mathToScreenX(static_cast<int>(std::round(bird.mathX)));
+            const int by = grid.mathToScreenY(static_cast<int>(std::round(bird.mathY)));
+            const int tx = grid.mathToScreenX(static_cast<int>(std::round(bird.attackTargetX)));
+            const int ty = grid.mathToScreenY(engine.getGroundMathY() + 1);
+
+            const int pulseAlpha = (bird.attackTicks % 8 < 4) ? 140 : 60;
+            QPen laserPen(QColor(255, 30, 30, pulseAlpha), std::max(1, scale / 2), Qt::DashLine);
+            painter.setPen(laserPen);
+            painter.drawLine(bx + scale / 2, by + scale / 2, tx + scale / 2, ty + scale / 2);
+
+            // Ground warning target box
+            const int rSize = scale * 10;
+            painter.setPen(QPen(QColor(255, 50, 50, pulseAlpha + 50), 2));
+            painter.setBrush(QColor(255, 30, 30, pulseAlpha / 3));
+            painter.drawRect(tx - rSize / 2, ty - scale * 2, rSize, scale * 3);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // DRIFTING PIXEL CLOUDS (Rendered in front of birds so birds hide behind clouds)
+    // -------------------------------------------------------------
+    renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY,
+                      engine.getDayNightTick(), dnProg, nightRatio, isStorm);
 
     // -------------------------------------------------------------
     // FOREGROUND RASTERIZATION PASS
@@ -967,18 +1317,6 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
 
     // Ground
     rasterizeGround(pixels, minMathX, maxMathX, engine.getGroundMathY(), minMathY);
-
-    // Birds (If storm is active, birds fly high in the clouds)
-    for (const auto &bird : engine.getBirds())
-    {
-        rasterizeBird(pixels, bird);
-    }
-
-    // Special Legendary Phoenix
-    if (engine.isLegendaryBirdActive())
-    {
-        rasterizeBird(pixels, engine.getLegendaryBird());
-    }
 
     // Player Basket
     rasterizeBasket(pixels, engine.getBasket());
@@ -1004,7 +1342,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         const int barRight = maxMathX - 16;
         const int barLeft = barRight - 36;
         rasterizePixelHearts(pixels, minMathX + 3, maxMathY - 3, engine.getHearts(), 3);
-        rasterizeLevelBar(pixels, barLeft, barRight, maxMathY - 2, engine.getLevel(), engine.getScore(), hudTick);
+        rasterizeLevelBar(pixels, barLeft, barRight, maxMathY - 2, engine.getLevel(), engine.getProgressScore(), hudTick);
         rasterizeEggStatus(pixels, barLeft, maxMathY - 11, engine.getGrowthEggCount(), engine.getMode() == GameMode::HARD, hudTick);
     }
 
@@ -1049,6 +1387,15 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             restoreGlow.setColorAt(1.0, QColor(0, 229, 255, 0));
             painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, restoreGlow);
         }
+        else if (egg.type == EggType::BOSS_REWARD)
+        {
+            const int auraR = scale * 10;
+            QRadialGradient trophyGlow(ex + scale / 2.0, ey + scale / 2.0, auraR);
+            trophyGlow.setColorAt(0.0, QColor(255, 214, 10, 120));
+            trophyGlow.setColorAt(0.45, QColor(187, 134, 252, 55));
+            trophyGlow.setColorAt(1.0, QColor(142, 68, 173, 0));
+            painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, trophyGlow);
+        }
         else if (egg.type == EggType::BIRD_POOP)
         {
             const int stinkR = scale * 6;
@@ -1057,6 +1404,45 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             stinkGlow.setColorAt(0.5, QColor(109, 76, 65, 35));
             stinkGlow.setColorAt(1.0, QColor(139, 195, 74, 0));
             painter.fillRect(ex + scale / 2 - stinkR, ey + scale / 2 - stinkR, stinkR * 2, stinkR * 2, stinkGlow);
+        }
+
+        // Telegraphed Boss Egg: Radiant beacon aura & ground landing indicator
+        if (egg.telegraphed)
+        {
+            const int auraR = scale * 9;
+            const int sparklePulse = static_cast<int>(35 * std::sin(hudTick * 0.45));
+            QRadialGradient bossEggGlow(ex + scale / 2.0, ey + scale / 2.0, auraR);
+            bossEggGlow.setColorAt(0.0, QColor(255, 235, 59, 130 + sparklePulse));
+            bossEggGlow.setColorAt(0.4, QColor(255, 193, 7, 50));
+            bossEggGlow.setColorAt(1.0, QColor(255, 193, 7, 0));
+            painter.fillRect(ex + scale / 2 - auraR, ey + scale / 2 - auraR, auraR * 2, auraR * 2, bossEggGlow);
+
+            const int groundSY = grid.mathToScreenY(engine.getGroundMathY() + 8);
+            const int markerW = scale * 12;
+            const int markerH = scale * 3;
+            QRadialGradient groundMarker(ex + scale / 2.0, groundSY, markerW / 2.0);
+            groundMarker.setColorAt(0.0, QColor(255, 215, 0, 90 + sparklePulse));
+            groundMarker.setColorAt(0.6, QColor(255, 193, 7, 30));
+            groundMarker.setColorAt(1.0, QColor(255, 193, 7, 0));
+            painter.fillRect(ex + scale / 2 - markerW / 2, groundSY - markerH / 2, markerW, markerH, groundMarker);
+        }
+    }
+
+    // Silhouette Birds: Faint Glowing Eye Glint Aura in Fog
+    for (const auto &bird : engine.getBirds())
+    {
+        if (bird.isSilhouette && !bird.inCloud)
+        {
+            const int bx = grid.mathToScreenX(static_cast<int>(std::round(bird.mathX)));
+            const int by = grid.mathToScreenY(static_cast<int>(std::round(bird.mathY)));
+            const int eyeX = bx + 4 * bird.direction * scale;
+            const int eyeY = by + 2 * scale;
+            const int auraR = scale * 5;
+            QRadialGradient eyeGlow(eyeX + scale / 2.0, eyeY + scale / 2.0, auraR);
+            eyeGlow.setColorAt(0.0, QColor(255, 235, 130, 150));
+            eyeGlow.setColorAt(0.4, QColor(255, 215, 0, 50));
+            eyeGlow.setColorAt(1.0, QColor(255, 215, 0, 0));
+            painter.fillRect(eyeX + scale / 2 - auraR, eyeY + scale / 2 - auraR, auraR * 2, auraR * 2, eyeGlow);
         }
     }
 
@@ -1073,6 +1459,39 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         phoenixGlow.setColorAt(0.7, QColor(229, 57, 53, 20));
         phoenixGlow.setColorAt(1.0, QColor(244, 81, 30, 0));
         painter.fillRect(lx + scale / 2 - auraR, ly + scale / 2 - auraR, auraR * 2, auraR * 2, phoenixGlow);
+    }
+
+    // Boss aura: tinted by its palette, red and throbbing when enraged, belly flares while charging
+    if (engine.getBoss().present && engine.getBoss().def)
+    {
+        const BossBird &bb = engine.getBoss();
+        const int bx = grid.mathToScreenX(static_cast<int>(std::round(bb.mathX)));
+        const int by = grid.mathToScreenY(static_cast<int>(std::round(bb.mathY)));
+        const int auraR = scale * 36;
+        QColor core = bb.def->pal.glow;
+        int a0 = 70;
+        if (bb.enraged)
+        {
+            core = lerpColor(core, QColor(255, 60, 60), 0.75);
+            a0 = static_cast<int>(95 + 40 * std::sin(hudTick * 0.3));
+        }
+        QRadialGradient bossGlow(bx + scale / 2.0, by + scale / 2.0, auraR);
+        bossGlow.setColorAt(0.0, QColor(core.red(), core.green(), core.blue(), a0));
+        bossGlow.setColorAt(0.5, QColor(core.red(), core.green(), core.blue(), a0 / 3));
+        bossGlow.setColorAt(1.0, QColor(core.red(), core.green(), core.blue(), 0));
+        painter.fillRect(bx + scale / 2 - auraR, by + scale / 2 - auraR, auraR * 2, auraR * 2, bossGlow);
+
+        if (bb.chargeTicks > 0)
+        {
+            const double charge = 1.0 - static_cast<double>(bb.chargeTicks) / std::max(1, bb.chargeMax);
+            const int py = grid.mathToScreenY(static_cast<int>(std::round(bb.mathY - 7.5)));
+            const int pr = static_cast<int>(scale * (6 + 10 * charge));
+            QRadialGradient pod(bx + scale / 2.0, py + scale / 2.0, pr);
+            pod.setColorAt(0.0, QColor(255, 255, 255, static_cast<int>(170 * charge)));
+            pod.setColorAt(0.4, QColor(bb.def->pal.glow.red(), bb.def->pal.glow.green(), bb.def->pal.glow.blue(), static_cast<int>(120 * charge)));
+            pod.setColorAt(1.0, QColor(bb.def->pal.glow.red(), bb.def->pal.glow.green(), bb.def->pal.glow.blue(), 0));
+            painter.fillRect(bx + scale / 2 - pr, py + scale / 2 - pr, pr * 2, pr * 2, pod);
+        }
     }
 
     // Companion Basket Celestial Aura
@@ -1153,23 +1572,10 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // -------------------------------------------------------------
-    // FOREGROUND CLOUDS: Drift in front of birds to conceal them
-    // -------------------------------------------------------------
-    if (!isStorm)
-    {
-        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, engine.getDayNightTick(),
-                          dnProg, nightRatio, isStorm, /*passType=*/2);
-    }
-
-    // -------------------------------------------------------------
     // THUNDERSTORM: Storm Clouds Overlay Covering Sheltered Birds
     // -------------------------------------------------------------
     if (isStorm)
     {
-        // Birds retreated into the storm clouds; thick storm clouds cover them from the front!
-        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, hudTick,
-                          dnProg, nightRatio, isStorm);
-
         // Torrential pixel rain streaks across the viewport
         for (int rx = minMathX; rx <= maxMathX; rx += 4)
         {
@@ -1224,6 +1630,15 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // -------------------------------------------------------------
+    // GAMEPLAY WEATHER: rain/wind overlays, then night fog (hides eggs up high)
+    // -------------------------------------------------------------
+    if (engine.getState() == GameState::PLAYING || engine.getState() == GameState::PAUSED)
+    {
+        renderWeatherOverlays(painter, engine, grid, scale, width, height, minMathX, maxMathX, hudTick);
+        renderFog(painter, grid, scale, width, height, engine.getGroundMathY(), engine.getFogDensity(), hudTick);
+    }
+
+    // -------------------------------------------------------------
     // FLOATING TEXTS & HUD LABELS
     // -------------------------------------------------------------
     QFont font("Segoe UI", 12, QFont::Bold);
@@ -1257,7 +1672,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // Shocked Basket Overhead Badge
-    if (engine.getLightningShockTimer() > 0 && engine.isGameAssistEnabled())
+    if (engine.getLightningShockTimer() > 0)
     {
         const Basket &b = engine.getBasket();
         const int bx = grid.mathToScreenX(static_cast<int>(std::round(b.mathX)));
@@ -1273,20 +1688,36 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.drawText(QRect(bx - 61, by - 11, 120, 20), Qt::AlignCenter, shockStr);
     }
 
-    // Sticky Poop Puddle Slowed Overhead Badge
-    if (engine.isBasketInStickyPuddle() && engine.isGameAssistEnabled())
+    // Surface badges: what is under (or happening to) the basket
+    if (engine.getState() == GameState::PLAYING)
     {
         const Basket &b = engine.getBasket();
         const int bx = grid.mathToScreenX(static_cast<int>(std::round(b.mathX)));
-        const int by = grid.mathToScreenY(static_cast<int>(std::round(b.mathY + b.height + (engine.getLightningShockTimer() > 0 ? 8 : 4))));
-        const QString slowStr = "💩 SLOWED";
-
-        QFont slowFont("Segoe UI", 9, QFont::Bold);
-        painter.setFont(slowFont);
-        painter.setPen(QColor(0, 0, 0, 220));
-        painter.drawText(QRect(bx - 50, by - 10, 100, 20), Qt::AlignCenter, slowStr);
-        painter.setPen(QColor(255, 179, 0));
-        painter.drawText(QRect(bx - 51, by - 11, 100, 20), Qt::AlignCenter, slowStr);
+        const int by = grid.mathToScreenY(static_cast<int>(std::round(b.mathY + b.height + 4)));
+        int row = (engine.getLightningShockTimer() > 0) ? 1 : 0;
+        auto drawBadge = [&](const QString &str, const QColor &col) {
+            QFont badgeFont("Segoe UI", 9, QFont::Bold);
+            painter.setFont(badgeFont);
+            const int yOff = by - 11 - row * 16;
+            painter.setPen(QColor(0, 0, 0, 200));
+            painter.drawText(QRect(bx - 70, yOff, 140, 20), Qt::AlignCenter, str);
+            painter.setPen(col);
+            painter.drawText(QRect(bx - 71, yOff - 1, 140, 20), Qt::AlignCenter, str);
+            ++row;
+        };
+        if (engine.isBasketOnPatch())
+        {
+            switch (engine.getBasketPatchType())
+            {
+            case PatchType::ICE:   drawBadge("🧊 ICE: SLIDING!", QColor(150, 235, 255)); break;
+            case PatchType::MUD:   drawBadge("🟤 MUD: HEAVY SLOW", QColor(205, 160, 112)); break;
+            case PatchType::SLIME: drawBadge("SLIME: SLOW", QColor(139, 195, 74)); break;
+            }
+        }
+        if (engine.getWetness() > 0.4)
+        {
+            drawBadge("🌧 SLIPPERY", QColor(150, 195, 240));
+        }
     }
 
     // HUD Text: Level, Score, High Score & Mode
@@ -1349,14 +1780,59 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.setPen(modeCol);
         painter.drawText(hudLeftX, hudStartY + 50, modeStr);
 
+        // Weather conditions that change how the game plays
+        int wy = hudStartY + 68;
+        auto weatherLine = [&](const QString &txt, const QColor &col) {
+            painter.setPen(QColor(0, 0, 0, 200));
+            painter.drawText(hudLeftX + 1, wy + 1, txt);
+            painter.setPen(col);
+            painter.drawText(hudLeftX, wy, txt);
+            wy += 16;
+        };
+        const double wnd = engine.getWind();
+        if (engine.getWindPhase() == WindPhase::WARNING)
+        {
+            const bool on = (hudTick / 4) % 2 == 0;
+            weatherLine(engine.getWindIncomingDirection() > 0 ? "WIND ▶▶▶ INCOMING" : "◀◀◀ WIND INCOMING",
+                        on ? QColor(255, 235, 59) : QColor(190, 225, 255));
+        }
+        else if (std::abs(wnd) > 0.08)
+        {
+            const int n = std::abs(wnd) > 0.7 ? 3 : (std::abs(wnd) > 0.35 ? 2 : 1);
+            QString arrows;
+            for (int i = 0; i < n; ++i) arrows += (wnd > 0 ? "▶" : "◀");
+            weatherLine(QString("WIND %1 %2").arg(arrows, n == 3 ? "STRONG" : (n == 2 ? "MEDIUM" : "LIGHT")), QColor(190, 225, 255));
+        }
+        if (engine.isThunderstormActive())
+        {
+            weatherLine("STORM: SLIPPERY", QColor(255, 235, 59));
+        }
+        else if (engine.isRainShowerActive() || engine.getWetness() > 0.4)
+        {
+            weatherLine("RAIN: SLIPPERY", QColor(150, 195, 240));
+        }
+        if (engine.getFogDensity() > 0.15)
+        {
+            weatherLine("FOG: LOW VISIBILITY", QColor(205, 214, 228));
+        }
+
         // Progress Bar Text (under the level bar)
         const bool maxed = level >= GameEngine::MAX_LEVEL;
-        const int levelStart = (level - 1) * GameEngine::POINTS_PER_LEVEL;
-        const int earned = maxed ? GameEngine::POINTS_PER_LEVEL : std::clamp(score - levelStart, 0, GameEngine::POINTS_PER_LEVEL);
-        const int remaining = GameEngine::POINTS_PER_LEVEL - earned;
+        const int levelStart = GameEngine::levelStartScore(level);
+        const int levelLen = GameEngine::levelLength(level);
+        const int earned = maxed ? levelLen : std::clamp(engine.getProgressScore() - levelStart, 0, levelLen);
+        const int remaining = levelLen - earned;
 
-        const QString progressLabel = maxed ? QString("MAX LEVEL (50)")
-                                            : QString("%1 PTS TO NEXT LEVEL").arg(remaining);
+        QString progressLabel = maxed ? QString("MAX LEVEL (50)")
+                                      : QString("%1 PTS TO NEXT LEVEL").arg(remaining);
+        if (engine.getBossPhase() == BossPhase::PENDING)
+        {
+            progressLabel = "⚠ BOSS INCOMING...";
+        }
+        else if (engine.isBossActive())
+        {
+            progressLabel = "⚔ BOSS FIGHT";
+        }
 
         QFont progressFont("Segoe UI", 9, QFont::Bold);
         painter.setFont(progressFont);
@@ -1391,6 +1867,12 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         painter.setPen(QColor(224, 230, 237, alpha));
         painter.drawText(QRect(0, height / 3 + 25, width, 30), Qt::AlignCenter,
                          "Faster eggs • More frequent drops • Smaller basket");
+    }
+
+    // Boss health bar + warning/victory banners
+    if (engine.getState() == GameState::PLAYING || engine.getState() == GameState::PAUSED)
+    {
+        renderBossHud(painter, engine, width, height, hudTick);
     }
 
     // Overlays for Start Menu, Game Over, and Paused
@@ -1535,11 +2017,13 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             y += 18;
             painter.drawText(colX, y, "• Avoid bird poop! Catching poop loses 1 heart (-1 ❤).");
             y += 18;
+            painter.drawText(colX, y, "• Birds attack from Level 1! DEFEND with [SPACE] / [🛡️] or DODGE!");
+            y += 18;
             painter.drawText(colX, y, "• Catch Green Growth Eggs to store in inventory (Use with [H])!");
             y += 18;
             painter.setFont(boldBodyFont);
             painter.setPen(QColor(199, 125, 255));
-            painter.drawText(colX + 10, y, "Level up every 100 points: Faster drops & smaller basket!");
+            painter.drawText(colX + 10, y, "Level up fast (50 / 70 pts early, then 100): Faster drops & smaller basket!");
             y += 24;
         }
         else if (slideIndex == 1)
@@ -1551,17 +2035,20 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
 
             painter.setFont(bodyFont);
             painter.setPen(QColor(224, 230, 237));
-            painter.drawText(colX, y, "• Move Basket : Mouse or [A / D] / [Left / Right]");
-            y += 20;
-            painter.drawText(colX, y, "• Use Growth Egg : Press [H] (Expands basket +25%)");
-            y += 20;
-            painter.drawText(colX, y, "• Summon Companion : Press [C] (Hard mode: 2 eggs, lasts 5s)");
-            y += 20;
+            painter.drawText(colX, y, "• Move Basket : Touch / Drag / Mouse / [A / D] / [Left / Right]");
+            y += 18;
+            painter.drawText(colX, y, "• Defend Basket : Press [SPACE] / Right-Click / 🛡️ DEFEND button");
+            y += 18;
+            painter.drawText(colX, y, "• Use Growth Egg : Press [H] or 🧺 Button (Expands basket)");
+            y += 18;
+            painter.drawText(colX, y, "• Summon Companion : Press [C] or 🤖 Button (Hard mode: 2 eggs)");
+            y += 18;
             painter.drawText(colX, y, "• Switch Difficulty : Press [1], [2], [3] or [TAB]");
-            y += 20;
-            painter.drawText(colX, y, "• Audio Mute / Unmute : Press [M]   •   Settings : [S] or click [⚙ SETTINGS]");
-            y += 20;
-            painter.drawText(colX, y, "• Pause : [ESC] or [P]   •   Restart : [R]   •   Next Slide : [→]");
+            y += 18;
+            painter.drawText(colX, y, "• Audio Mute / Unmute : Press [M] or [S]");
+            y += 18;
+            painter.drawText(colX, y, "• Pause : [ESC] or ⏸   •   Restart : [R]");
+            y += 24;
         }
         else if (slideIndex == 2)
         {
@@ -1606,7 +2093,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             painter.drawText(colX + 90, y, "+25 pts");
             painter.setFont(bodyFont);
             painter.setPen(QColor(156, 168, 184));
-            painter.drawText(colX + 180, y, "Spawns more as basket shrinks! [H] grows +25%");
+            painter.drawText(colX + 150, y, "Store in inventory, press [H] to grow!");
             y += lineH;
 
             painter.setFont(boldBodyFont);
@@ -1616,14 +2103,45 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             painter.setFont(bodyFont);
             painter.setPen(QColor(156, 168, 184));
             painter.drawText(colX + 150, y, "Restores basket to max starting size!");
+            y += lineH;
+
+            painter.setFont(boldBodyFont);
+            painter.setPen(QColor(255, 214, 10));
+            painter.drawText(colX, y, "[♛] Trophy");
+            painter.drawText(colX + 90, y, "+100 pts");
+            painter.setFont(bodyFont);
+            painter.setPen(QColor(156, 168, 184));
+            painter.drawText(colX + 150, y, "Boss reward: +heart, wider basket!");
             y += 24;
+        }
+        else if (slideIndex == 3)
+        {
+            painter.setFont(secFont);
+            painter.setPen(QColor(255, 112, 67));
+            painter.drawText(colX, y, "BOSSES, WEATHER & HAZARDS");
+            y += 18;
+
+            painter.setFont(bodyFont);
+            auto bullet = [&](const QColor &c, const QString &text) {
+                painter.setPen(c);
+                const QRect r(colX, y - 11, cardW - 60, 40);
+                const QRect used = painter.boundingRect(r, Qt::TextWordWrap, text);
+                painter.drawText(r, Qt::TextWordWrap, text);
+                y += used.height() + 3;
+            };
+            bullet(QColor(255, 183, 3),  "⚔ A BOSS arrives at level 3, then every 10 levels. Catch its real eggs to drain its health bar; each volley hides one real egg among droppings.");
+            bullet(QColor(255, 120, 120), "💢 Below 40% health the boss ENRAGES: faster volleys and a signature twist. Beat it for a bonus, a 👑 Trophy Egg and the next level.");
+            bullet(QColor(190, 225, 255), "💨 WIND pushes eggs sideways. Watch the gust warning and lean into it.");
+            bullet(QColor(150, 195, 240), "🌧 RAIN makes the basket slide, and mud forms on wet ground (heavy slow).");
+            bullet(QColor(150, 235, 255), "❄ Night frost makes ICE patches (you slide, hard to stop). 🌫 Night FOG hides eggs up high.");
+            y += 4;
         }
 
         // Slide pagination controls
         QFont navFont("Segoe UI", 9, QFont::Bold);
         painter.setFont(navFont);
         painter.setPen(QColor(255, 209, 102));
-        QString slideIndicator = QString("Page %1 of 3   •   Tap [◀ Prev] or [Next ▶] to change guide").arg(slideIndex + 1);
+        QString slideIndicator = QString("Page %1 of 4   •   Tap [◀ Prev] or [Next ▶] to change guide").arg(slideIndex + 1);
         painter.drawText(QRect(cardX, y, cardW, 20), Qt::AlignCenter, slideIndicator);
 
         painter.restore();
@@ -1675,22 +2193,29 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     painter.end();
+
+    // Screen shake (boss landings, big hits, rage): shift the finished frame a few pixels
+    if (engine.getState() == GameState::PLAYING && engine.getScreenShakeTicks() > 0)
+    {
+        const int mag = std::max(1, std::min(engine.getScreenShakeMag(), (engine.getScreenShakeTicks() + 2) / 3 + 1)) * std::max(1, scale / 3);
+        const unsigned h1 = static_cast<unsigned>(hudTick) * 2654435761u;
+        const int dx = static_cast<int>((h1 >> 8) % (2 * mag + 1)) - mag;
+        const int dy = static_cast<int>((h1 >> 17) % (2 * mag + 1)) - mag;
+        QPixmap shaken(width, height);
+        shaken.fill(QColor(12, 14, 22));
+        QPainter sp(&shaken);
+        sp.drawPixmap(dx, dy, pix);
+        sp.end();
+        return shaken;
+    }
     return pix;
 }
 
 QRect GameRenderer::getPauseButtonRect(int width, int height)
 {
     Q_UNUSED(height);
-    const int sz = 32;
-    return QRect(width - sz - 14, 10, sz, sz);
-}
-
-QRect GameRenderer::getSettingsButtonRect(int width, int height)
-{
-    Q_UNUSED(height);
     const int sz = 34;
-    const int gap = 12;
-    return QRect(width - (sz * 2) - 14 - gap, 12, sz, sz);
+    return QRect(width - sz - 10, 10, sz, sz);
 }
 
 QRect GameRenderer::getSettingsBackButtonRect(int width, int height)
@@ -1748,9 +2273,17 @@ QRect GameRenderer::getCompanionButtonRect(int width, int height)
     return QRect(width - (sz * 2) - 30, height - btnH - sz - 26, sz, sz);
 }
 
+QRect GameRenderer::getDefendButtonRect(int width, int height)
+{
+    const int btnH = std::clamp(height / 7, 52, 72);
+    const int sz = std::clamp(height / 9, 42, 54);
+    const int defW = std::clamp(width / 7, 84, 115);
+    return QRect(16, height - btnH - sz - 26, defW, sz);
+}
+
 void GameRenderer::renderOnScreenControls(QPainter &painter, const GameEngine &engine, int width, int height)
 {
-    // 1. Top-Right Pause Button [ ⏸ ]
+    // 1. Pause Button [ ⏸ ]
     const QRect pauseRect = getPauseButtonRect(width, height);
     painter.setPen(QPen(QColor(0, 229, 255, 180), 1.5));
     painter.setBrush(QColor(16, 24, 38, 180));
@@ -1790,7 +2323,40 @@ void GameRenderer::renderOnScreenControls(QPainter &painter, const GameEngine &e
         painter.drawText(QRect(cRect.x(), cRect.y() + 22, cRect.width(), 16), Qt::AlignCenter, "SUMMON");
     }
 
-    // 4. Mode-Specific Overlays
+    // 4. Defend Button [ 🛡️ DEFEND ]
+    {
+        const QRect defRect = getDefendButtonRect(width, height);
+        const bool isDefending = engine.isBasketDefending();
+        const bool canDefend = engine.getBasketDefendCooldown() <= 0;
+
+        if (isDefending)
+        {
+            painter.setPen(QPen(QColor(0, 255, 255), 2.5));
+            painter.setBrush(QColor(0, 180, 216, 220));
+        }
+        else if (canDefend)
+        {
+            painter.setPen(QPen(QColor(0, 229, 255, 200), 1.8));
+            painter.setBrush(QColor(16, 32, 52, 200));
+        }
+        else
+        {
+            painter.setPen(QPen(QColor(70, 80, 100, 140), 1.0));
+            painter.setBrush(QColor(16, 20, 28, 160));
+        }
+        painter.drawRoundedRect(defRect, 8, 8);
+
+        QFont defFont = painter.font();
+        defFont.setBold(true);
+        defFont.setPixelSize(std::clamp(defRect.height() / 3, 11, 14));
+        painter.setFont(defFont);
+        painter.setPen(isDefending ? QColor(255, 255, 255) : (canDefend ? QColor(0, 229, 255) : QColor(140, 150, 170)));
+
+        QString defText = isDefending ? "🛡️ SHIELD!" : (canDefend ? "🛡️ DEFEND" : "🛡️ WAIT");
+        painter.drawText(defRect, Qt::AlignCenter, defText);
+    }
+
+    // 5. Mode-Specific Overlays
     const ControlMode mode = engine.getControlMode();
     if (mode == ControlMode::VIRTUAL_BUTTONS)
     {
@@ -1974,7 +2540,7 @@ void GameRenderer::renderPauseMenu(QPainter &painter, const GameEngine &engine, 
     painter.setBrush(QColor(22, 54, 38));
     painter.drawRoundedRect(btnResume, 8, 8);
     painter.setPen(QColor(46, 204, 113));
-    painter.drawText(btnResume, Qt::AlignCenter, "▶   Resume Game   [SPACE]");
+    painter.drawText(btnResume, Qt::AlignCenter, "▶   Resume Game   [ESC]");
 
     // 2. Settings Button
     const QRect btnSettings(btnX, startY + (btnH + btnGap), btnW, btnH);
@@ -2039,7 +2605,7 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
     painter.drawText(btnBack, Qt::AlignCenter, "◀ Back");
 
     const int cardW = std::min(width - 40, 560);
-    const int cardH = std::min(height - 40, 360);
+    const int cardH = std::min(height - 40, 350);
     const int cardX = (width - cardW) / 2;
     const int cardY = (height - cardH) / 2;
 
@@ -2064,7 +2630,7 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
     // Scrollable Viewport
     const int contentTop = cardY + 52;
     const int viewportH = cardH - 60;
-    const int totalContentH = 330;
+    const int totalContentH = 325;
     const int maxScroll = std::max(0, totalContentH - viewportH);
     const int scrollY = std::clamp(engine.getSettingsScrollY(), 0, maxScroll);
 
@@ -2220,32 +2786,9 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
         painter.drawText(sb, Qt::AlignCenter, scaleLabels[i]);
     }
 
-    // --- ROW 6: Game Assist (Warnings & Hazard Badges) ---
-    const int y6 = contentTop + 208;
-    painter.setFont(lblFont);
-    painter.setPen(QColor(224, 230, 237));
-    painter.drawText(QRect(rowLeftX, y6, 130, 28), Qt::AlignLeft | Qt::AlignVCenter, "Game Assist:");
-
-    const bool assistOn = engine.isGameAssistEnabled();
-    const QRect btnAssistOn(rowLeftX + 130, y6, 125, 26);
-    const QRect btnAssistOff(rowLeftX + 265, y6, 125, 26);
-
-    painter.setFont(btnFont);
-    painter.setPen(QPen(assistOn ? QColor(46, 204, 113) : QColor(60, 75, 95), assistOn ? 2 : 1));
-    painter.setBrush(assistOn ? QColor(22, 54, 38) : QColor(26, 32, 44));
-    painter.drawRoundedRect(btnAssistOn, 6, 6);
-    painter.setPen(assistOn ? QColor(46, 204, 113) : QColor(160, 175, 195));
-    painter.drawText(btnAssistOn, Qt::AlignCenter, "🟢 ON (Default)");
-
-    painter.setPen(QPen(!assistOn ? QColor(255, 107, 107) : QColor(60, 75, 95), !assistOn ? 2 : 1));
-    painter.setBrush(!assistOn ? QColor(56, 24, 28) : QColor(26, 32, 44));
-    painter.drawRoundedRect(btnAssistOff, 6, 6);
-    painter.setPen(!assistOn ? QColor(255, 107, 107) : QColor(160, 175, 195));
-    painter.drawText(btnAssistOff, Qt::AlignCenter, "⚪ OFF (Pro)");
-
     // --- Keybinds Overview Panel ---
-    const int yKeys = contentTop + 248;
-    const QRect keyBox(rowLeftX, yKeys, cardW - 70, 68);
+    const int y6 = contentTop + 208;
+    const QRect keyBox(rowLeftX, y6, cardW - 70, 74);
     painter.setPen(QPen(QColor(42, 54, 76), 1));
     painter.setBrush(QColor(14, 18, 28, 200));
     painter.drawRoundedRect(keyBox, 8, 8);
@@ -2253,7 +2796,7 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
     QFont keyTitleFont("Segoe UI", 9, QFont::Bold);
     painter.setFont(keyTitleFont);
     painter.setPen(QColor(255, 209, 102));
-    painter.drawText(QRect(rowLeftX + 10, yKeys + 6, cardW - 90, 16), Qt::AlignLeft, "QUICK CONTROLS REFERENCE:");
+    painter.drawText(QRect(rowLeftX + 10, y6 + 5, cardW - 90, 16), Qt::AlignLeft, "QUICK CONTROLS REFERENCE:");
 
     QFont keyBodyFont("Segoe UI", 8, QFont::Normal);
     painter.setFont(keyBodyFont);
@@ -2277,9 +2820,11 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
         moveTip = "• Move: Mouse Cursor OR [A / D] / [Left / Right Arrow] Keys (speed-capped)";
     }
 
-    painter.drawText(QRect(rowLeftX + 10, yKeys + 24, cardW - 90, 18), Qt::AlignLeft, moveTip);
-    painter.drawText(QRect(rowLeftX + 10, yKeys + 43, cardW - 90, 18), Qt::AlignLeft,
-                     "• [H] / 🧺: Growth Egg  •  [C] / 🤖: Companion  •  [A]: Assist Toggle  •  [ESC] / ⏸: Pause");
+    painter.drawText(QRect(rowLeftX + 10, y6 + 24, cardW - 90, 16), Qt::AlignLeft, moveTip);
+    painter.drawText(QRect(rowLeftX + 10, y6 + 42, cardW - 90, 16), Qt::AlignLeft,
+                     "• [H] or 🧺 Button: Growth Egg  •  [C] or 🤖 Button: Companion (Hard)  •  [ESC] or ⏸: Pause");
+    painter.drawText(QRect(rowLeftX + 10, y6 + 58, cardW - 90, 16), Qt::AlignLeft,
+                     "• Scroll: Touch / Drag up and down or use Mouse Wheel to scroll settings");
 
     painter.restore();
 

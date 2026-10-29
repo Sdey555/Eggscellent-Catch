@@ -1,13 +1,16 @@
-﻿# Eggscellent Catch
+# Eggscellent Catch
 
 Eggscellent Catch is a Qt/C++ arcade game built around a custom pixel-raster graphics pipeline. Catch eggs in a woven basket, avoid bird droppings, and progress through increasingly difficult levels.
 
 ## Features
 
 - Three difficulty modes: Easy, Medium, and Hard
-- Up to 50 levels; each level requires 100 points and increases the challenge
+- Up to 50 levels; levels 1 and 2 are short (50 and 70 points), later levels need 100 points each and increases the challenge
 - Moving birds, falling eggs, animated pixel art, particle effects, and a score/high-score HUD
 - Day/night cycle, occasional thunderstorms, lightning, and sticky ground puddles
+- **Boss levels** at level 3 and then every 10 levels (5 unique bosses) with volley attack patterns, a rage phase, and a trophy-egg reward
+- **Gameplay weather**: crosswinds that push eggs, rain that makes the basket slippery, and night fog that hides distant eggs
+- **Hazard patches**: sticky slime, slowing mud, and slippery ice that form on the ground
 - Background music and sound effects, with audio settings
 - Mouse, keyboard, touch, virtual-button, and gyroscope control modes
 - Special growth eggs and a temporary companion basket in Hard mode
@@ -23,8 +26,25 @@ You start with three hearts. Catch regular and golden eggs to score points, and 
 | Growth egg | +25 points and adds one growth egg to your inventory; safe to miss |
 | Restoration egg | +100 points and restores the basket to its starting width; safe to miss |
 | Bird dropping | Catching it costs one heart; safe to miss |
+| Trophy egg | Dropped by a defeated boss; catch it for a big bonus; missing it costs nothing |
 
-Green growth egg spawn rates dynamically increase as the basket narrows; using one (`H`) expands basket size by 25% and stores it as the new baseline for future level shrinks. Birds may also drift behind foreground clouds to trigger surprise cloud drops. In Hard mode, press `C` to spend two growth eggs and summon a temporary companion basket. Restoration eggs may appear after the basket has narrowed.
+Growth eggs appear when the basket has become small. Press `H` to use one and widen the basket. In Hard mode, press `C` to spend two growth eggs and summon a temporary companion basket. Restoration eggs may appear after the basket has narrowed.
+
+### Boss levels
+
+Level 3 is a first boss fight, and then so is every 10th level (10, 20, 30, 40, 50; the level-50 finale rematches the level-40 boss). Level progress freezes, the normal egg flow stops, and a boss bird hovers above the field and unleashes volleys of droppings with one real egg hidden among them (fan, burst, sweep and rain patterns, getting harder per tier). Catch the real egg to damage the boss; catching a dropping costs a heart. Below 40% health the boss enters a rage phase with faster, denser volleys. Boss health scales with difficulty (Easy 0.85x, Medium 1.0x, Hard 1.2x). Defeating a boss banks a bonus (150 + 50 per tier) and drops a trophy egg. Every boss egg is always reachable by the basket.
+
+### Weather that matters
+
+- **Wind**: a warning arrow shows the incoming direction, then a gust pushes falling eggs sideways (they bounce off the walls).
+- **Rain**: wet ground makes the basket slide with momentum, so plan your stops.
+- **Fog**: at night, fog thickens and hides distant eggs until they get close.
+- **Cloud banks**: birds glide into drifting clouds and disappear inside; eggs drop directly from the cloud's underside with day/sunset/night puff wisps.
+- **Fog dive at night**: birds dip into the night fog and emerge as shadowy silhouettes with a faint glowing eye glint so players can track their flight.
+
+### Hazard patches
+
+Patches form with a short animation and melt away after a while. **Slime** is sticky and slows you, **mud** slows you more, and **ice** makes the basket slide. A badge appears on the HUD while you are standing on one. Birds' droppings can leave patches too.
 
 ## Controls
 
@@ -108,14 +128,14 @@ The script writes `EggscellentCatch-Portable.exe` to the project root. It packag
 ```text
 src/
 ├── core/       # Pixel/grid primitives and motion-sensor support
-├── entities/   # Basket, birds, falling eggs, and shared game types
-├── game/       # Game state, rules, physics, difficulty, and weather
+├── entities/   # Basket, birds, bosses (Boss.cpp/h), falling eggs, and shared game types
+├── game/       # Game state, rules, physics, boss fights, weather, and hazard patches
 ├── rendering/  # Pixel font and scene/game rendering
 ├── audio/      # Music and sound-effect playback
 ├── ui/         # Qt window, interactive canvas, and UI form
 └── main.cpp    # Application entry point
 
-audio/          # Music and sound-effect assets
+audio/          # Music and sound-effect assets (regenerate the synthesized SFX with `python3 generate_audio.py`)
 audio.qrc       # Qt audio resource collection
 packaging/      # Windows portable-app launcher and packaging script
 DrawLine.pro    # qmake project

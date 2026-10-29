@@ -34,12 +34,12 @@ public:
 
     // On-screen touch button layouts
     static QRect getPauseButtonRect(int width, int height);
-    static QRect getSettingsButtonRect(int width, int height);
     static QRect getSettingsBackButtonRect(int width, int height);
     static QRect getVirtualLeftButtonRect(int width, int height);
     static QRect getVirtualRightButtonRect(int width, int height);
     static QRect getGrowthButtonRect(int width, int height);
     static QRect getCompanionButtonRect(int width, int height);
+    static QRect getDefendButtonRect(int width, int height);
 
     static void renderOnScreenControls(QPainter &painter, const GameEngine &engine, int width, int height);
 
@@ -63,9 +63,8 @@ public:
                                int minMathX, int maxMathX, int minMathY, int maxMathY, int groundMathY,
                                double dayNightProgress, double nightRatio, bool isStorm, int flashTicks, int hudTick);
     static void renderPixelClouds(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
-                                  int minMathX, int maxMathX, int maxMathY, int hudTick,
-                                  double dayNightProgress, double nightRatio, bool isStorm,
-                                  int passType = 0);
+                                  int minMathX, int maxMathX, int maxMathY, int cloudTick,
+                                  double dayNightProgress, double nightRatio, bool isStorm);
     static void renderPixelHills(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
                                  int minMathX, int maxMathX, int groundMathY,
                                  double dayNightProgress, double nightRatio, bool isStorm);
@@ -77,6 +76,15 @@ public:
                                  double dayNightProgress, double nightRatio, bool isStorm);
     static void renderStickyPuddles(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
                                     const std::vector<StickyPuddle> &puddles, int groundMathY, int hudTick);
+
+    // Gameplay weather overlays: rain, wet-ground sheen, wind streaks and gust warnings
+    static void renderWeatherOverlays(QPainter &painter, const GameEngine &engine, const MyGrid &grid,
+                                      int scale, int width, int height, int minMathX, int maxMathX, int hudTick);
+    // Night fog: thick high up, clearing toward the ground
+    static void renderFog(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
+                          int groundMathY, double density, int hudTick);
+    // Boss health bar and the warning / victory banners
+    static void renderBossHud(QPainter &painter, const GameEngine &engine, int width, int height, int hudTick);
 };
 
 #endif // GAMERENDERER_H

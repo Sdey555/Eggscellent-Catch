@@ -21,6 +21,7 @@ SOURCES += \
     src/core/Grid.cpp \
     src/entities/Basket.cpp \
     src/entities/Bird.cpp \
+    src/entities/Boss.cpp \
     src/entities/FallingEgg.cpp \
     src/game/GameEngine.cpp \
     src/rendering/PixelFont.cpp \
@@ -37,6 +38,7 @@ HEADERS += \
     src/entities/Particle.h \
     src/entities/Basket.h \
     src/entities/Bird.h \
+    src/entities/Boss.h \
     src/entities/FallingEgg.h \
     src/game/GameEngine.h \
     src/rendering/PixelFont.h \

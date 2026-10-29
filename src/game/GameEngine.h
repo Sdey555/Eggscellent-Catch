@@ -9,6 +9,7 @@
 #include "GameTypes.h"
 #include "Basket.h"
 #include "Bird.h"
+#include "Boss.h"
 #include "FallingEgg.h"
 #include "Particle.h"
 #include "Grid.h"
@@ -21,8 +22,17 @@ class GameEngine
 {
 public:
     static constexpr int MAX_LEVEL = 50;
-    static constexpr int POINTS_PER_LEVEL = 100;
+    static constexpr int POINTS_PER_LEVEL = 100;       // standard level length (level 3 onwards)
+    static constexpr int LEVEL1_POINTS = 50;           // levels 1 and 2 are shorter
+    static constexpr int LEVEL2_POINTS = 70;
+    static constexpr int levelLength(int lvl) { return lvl <= 1 ? LEVEL1_POINTS : (lvl == 2 ? LEVEL2_POINTS : POINTS_PER_LEVEL); }
+    static constexpr int levelStartScore(int lvl)
+    {
+        return lvl <= 1 ? 0 : (lvl == 2 ? LEVEL1_POINTS : LEVEL1_POINTS + LEVEL2_POINTS + (lvl - 3) * POINTS_PER_LEVEL);
+    }
     static constexpr int DAY_NIGHT_CYCLE_TICKS = 2400; // ~72s per full day-night cycle
+    static constexpr int BOSS_BANNER_TICKS = 110;       // boss warning banner length
+    static constexpr double WIND_DRIFT = 0.20;          // egg drift per tick at full wind
 
     GameEngine();
 
@@ -45,6 +55,7 @@ public:
     void cycleMode(const MyGrid &grid);
     void useGrowthEgg();           // Triggered by 'H' key
     void summonCompanionBasket();   // Triggered by 'C' key (Hard mode)
+    void defend();                  // Defend basket against swooping bird attack ([SPACE] / Tap)
 
     // Audio Callback
     using SoundCallback = std::function<void(SoundId)>;
@@ -67,6 +78,9 @@ public:
     void setSettingsScrollY(int y) { settingsScrollY = std::max(0, y); }
     void scrollSettings(int dy, int maxScroll) { settingsScrollY = std::clamp(settingsScrollY + dy, 0, maxScroll); }
     int getScore() const { return score; }
+    // Score that counts toward level progress (boss-fight points are banked as score only,
+    // so beating a boss lands you cleanly on the next level rather than skipping several)
+    int getProgressScore() const { return score - levelCredit; }
     int getHighScore() const { return highScore; }
     int getHearts() const { return hearts; }
     int getLevel() const { return level; }
@@ -81,9 +95,6 @@ public:
     void setMouseControlAllowed(bool allowed) { mouseControlAllowed = allowed; }
     bool isLightningFlashEnabled() const { return lightningFlashEnabled; }
     void setLightningFlashEnabled(bool enabled) { lightningFlashEnabled = enabled; }
-    bool isGameAssistEnabled() const { return gameAssistEnabled; }
-    void setGameAssistEnabled(bool enabled) { gameAssistEnabled = enabled; }
-    void addWarningFloatingText(double x, double y, const QString &text, const QColor &col);
 
     ControlMode getControlMode() const { return controlMode; }
     void setControlMode(ControlMode m);
@@ -101,8 +112,6 @@ public:
     const FallingEgg& getFallingEgg() const; // Backwards compatibility
     const CompanionBasket& getCompanionBasket() const { return companionBasket; }
     const std::vector<StickyPuddle>& getStickyPuddles() const { return stickyPuddles; }
-    bool isBasketInStickyPuddle() const { return basketInStickyPuddle; }
-    bool isBirdInCloud(const Bird &bird, const MyGrid &grid) const;
     bool isLegendaryBirdActive() const { return legendaryBirdActive; }
     const Bird& getLegendaryBird() const { return legendaryBird; }
     const std::vector<GameParticle>& getParticles() const { return particles; }
@@ -121,6 +130,43 @@ public:
     int getLightningStrikeState() const { return lightningStrikeState; }
     int getLightningStrikeTimer() const { return lightningStrikeTimer; }
     double getLightningStrikeX() const { return lightningStrikeX; }
+
+    // Bird Attack & Basket Defense
+    bool isBasketDefending() const { return basketDefending; }
+    int getBasketDefendCooldown() const { return basketDefendCooldown; }
+
+    // ---------------------------------------------------------
+    // Boss fights (every 10 levels: 10, 20, 30, 40, 50)
+    // ---------------------------------------------------------
+    static bool isBossLevel(int lvl) { return (lvl >= 10 && lvl % 10 == 0 && lvl <= MAX_LEVEL); }
+    BossPhase getBossPhase() const { return bossPhase; }
+    bool isBossActive() const { return bossPhase != BossPhase::NONE; }
+    const BossBird& getBoss() const { return boss; }
+    int getBossBannerTicks() const { return bossBannerTicks; }
+    int getBossPhaseTicks() const { return bossPhaseTicks; }
+    int getBossBannerMax() const { return BOSS_BANNER_TICKS; }
+    int getBossPendingLevel() const { return level; }
+    int getScreenShakeTicks() const { return screenShakeTicks; }
+    int getScreenShakeMag() const { return screenShakeMag; }
+    int getBossesDefeated() const { return bossesDefeated; }
+
+    // ---------------------------------------------------------
+    // Gameplay weather
+    // ---------------------------------------------------------
+    // Wind: signed, -1 (blowing left) .. +1 (blowing right); eggs drift by wind * WIND_DRIFT per tick
+    double getWind() const { return windStrength; }
+    WindPhase getWindPhase() const { return windPhase; }
+    int getWindWarningTicks() const { return windPhase == WindPhase::WARNING ? windPhaseTicks : 0; }
+    double getWindIncomingDirection() const { return windIncomingDir; }
+    bool isRainShowerActive() const { return rainActive; }
+    double getWetness() const { return wetness; }       // 0 = dry, 1 = soaked (basket slides)
+    double getFogDensity() const { return fogDensity; } // 0 = clear night, ~0.8 = thick
+    double getNightFactor() const;                        // 0 day .. 1 deep night (smooth)
+    bool isBasketSliding() const { return basketSlipAlpha < 0.8; }
+
+    // Ground hazards under the basket
+    bool isBasketOnPatch() const { return basketOnPatch; }
+    PatchType getBasketPatchType() const { return basketPatchType; }
 
     // Difficulty helpers
     int levelForScore(int s) const;
@@ -157,9 +203,6 @@ private:
 
     int eggSpawnCooldown{100};
     int dualDropCooldownTicks{900};
-    int cloudDropCooldownTicks{600};
-    bool basketInStickyPuddle{false};
-    bool gameAssistEnabled{true};
     int groundMathY{-24};
 
     // Day / Night & Weather
@@ -174,6 +217,12 @@ private:
     int lightningStrikeState{0}; // 0 = idle, 1 = warning sizzle, 2 = striking
     int lightningStrikeTimer{0};
     double lightningStrikeX{0.0};
+
+    // Bird Attack & Basket Defense (From Level 1 onwards)
+    int birdAttackCooldownTicks{280};
+    bool basketDefending{false};
+    int basketDefendTicks{0};
+    int basketDefendCooldown{0};
 
     bool keyLeftPressed{false};
     bool keyRightPressed{false};
@@ -207,6 +256,66 @@ private:
     bool legendaryEggDropped{false};
     int legendaryAnimTick{0};
 
+    // ---------------------------------------------------------
+    // Boss state
+    // ---------------------------------------------------------
+    struct BossShot {
+        int delay{0};            // ticks until this egg leaves the boss
+        double offsetX{0.0};     // launch offset from the boss centre
+        double landX{0.0};       // where the egg should reach the ground
+        bool straight{true};     // true = drop straight down, ignore landX
+        EggType type{EggType::BIRD_POOP};
+    };
+    BossPhase bossPhase{BossPhase::NONE};
+    BossBird boss;
+    int bossPhaseTicks{0};
+    int bossBannerTicks{0};
+    int bossNextVolley{60};
+    unsigned bossPattern{0};
+    unsigned bossLastPattern{0};
+    double bossTargetX{0.0};
+    double bossHoverY{0.0};
+    int bossSweepTicks{0};
+    double bossSweepVx{0.0};
+    std::vector<BossShot> bossShots;
+    bool bossRewardDropped{false};
+    bool bossGale{false};
+    int highestBossBeaten{0};
+    int levelCredit{0};
+    int bossesDefeated{0};
+    int screenShakeTicks{0};
+    int screenShakeMag{0};
+
+    // ---------------------------------------------------------
+    // Weather state
+    // ---------------------------------------------------------
+    double windStrength{0.0};
+    double windTarget{0.0};
+    double windIncomingDir{1.0};
+    double windGustStrength{0.0};
+    WindPhase windPhase{WindPhase::CALM};
+    int windPhaseTicks{600};
+    bool windForced{false};
+    bool rainActive{false};
+    int rainTicks{0};
+    int rainCooldown{1400};
+    double wetness{0.0};
+    double fogDensity{0.0};
+    bool fogAnnounced{false};
+    double basketSlideVel{0.0};
+    double basketSlipAlpha{1.0};
+
+    // Ground hazards
+    int mudCooldown{300};
+    int frostCooldown{200};
+    bool basketOnPatch{false};
+    PatchType basketPatchType{PatchType::SLIME};
+
+    struct PatchEffect {
+        double speedMul{1.0};
+        double slipAlpha{1.0};
+    };
+
     SoundCallback soundCallback{nullptr};
     void triggerSound(SoundId id) {
         if (soundCallback) {
@@ -228,7 +337,31 @@ private:
     void checkLevelUp(const MyGrid &grid);
     void applyLevelSettings(const MyGrid &grid);
 
+    // Boss
+    void updateBoss(const MyGrid &grid);
+    void startBossIntro(const MyGrid &grid);
+    void updateBossFight(const MyGrid &grid);
+    void updateBossDefeat(const MyGrid &grid);
+    void beginBossCharge(const MyGrid &grid);
+    void fireBossVolley(const MyGrid &grid);
+    void spawnBossEgg(const BossShot &shot, const MyGrid &grid);
+    void enterBossRage();
+    void damageBoss(int dmg, double x, double y);
+    void defeatBoss();
+    double bossEggSpeedMul() const;
+    int estimateFallTicks(double startY, double speedMul) const;
+    void shake(int ticks, int mag);
+
+    // Weather & hazards
+    void updateWeatherEffects(const MyGrid &grid);
+    void updateWind();
+    void updateRainAndFog();
+    PatchEffect updatePatches(const MyGrid &grid);
+    void updateHazardSpawns(const MyGrid &grid);
+    void spawnPatch(PatchType type, double x, double radius, int life);
+
     void spawnEggFromBird(Bird &bird, const MyGrid &grid, EggType eType);
+    void spawnCloudPuffParticles(double x, double y, int count = 10);
     void spawnCatchParticles(double x, double y, const QColor &col, int count = 14);
     void spawnSplatParticles(double x, double y, EggType type);
     void spawnPoopSplashParticles(double x, double y);

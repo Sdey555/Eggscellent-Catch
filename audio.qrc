@@ -15,5 +15,10 @@
     <file>audio/sfx_grow_use.wav</file>
     <file>audio/sfx_companion_spawn.wav</file>
     <file>audio/sfx_ui_click.wav</file>
+    <file>audio/sfx_boss_warning.wav</file>
+    <file>audio/sfx_boss_hit.wav</file>
+    <file>audio/sfx_boss_defeat.wav</file>
+    <file>audio/sfx_wind_gust.wav</file>
+    <file>audio/sfx_frost_form.wav</file>
 </qresource>
 </RCC>

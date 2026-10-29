@@ -6,7 +6,8 @@ enum class EggType {
     GOLDEN,          // Special bonus egg (+50 pts, miss = -1 heart)
     BIRD_POOP,       // Bird poop (catch = -1 heart, miss = safe!)
     BASKET_GROW,     // Rare growth egg (increases basket width +2, bonus +25 pts)
-    BASKET_RESTORE   // Very rare legendary egg (restores basket to starting width 9, bonus +100 pts)
+    BASKET_RESTORE,  // Very rare legendary egg (restores basket to starting width 9, bonus +100 pts)
+    BOSS_REWARD      // Trophy egg dropped by a defeated boss (+100 pts, heart/growth eggs, wider basket; safe to miss)
 };
 
 inline constexpr EggType BOMB = EggType::BIRD_POOP;
@@ -17,21 +18,11 @@ enum class GameMode {
     HARD
 };
 
-struct CloudDef {
-    int speedDivider;
-    int tickOffset;
-    int relY;
-    int width;
-    int height;
-    bool isForeground;
-};
-
-inline constexpr CloudDef GAME_CLOUDS[5] = {
-    { 5,  15, -18, 54, 16, true  },  // Foreground cloud covering top bird (mathY = maxMathY - 11)
-    { 6, 180, -38, 58, 18, true  },  // Foreground cloud covering lower bird (mathY = maxMathY - 32)
-    { 4, 320, -18, 50, 15, true  },  // Second foreground cloud for top bird lane
-    { 7,  90, -36, 52, 17, true  },  // Second foreground cloud for lower bird lane
-    { 8, 450, -42, 60, 16, false }   // Distant background cloud high up
+// Ground hazard patch families. SLIME is the original sticky poop puddle.
+enum class PatchType {
+    SLIME,   // Sticky poop puddle: basket moves at 45% speed
+    MUD,     // Rain-soaked mud: heavy slow (30% speed), forms where the ground is wet
+    ICE      // Night frost: normal speed but the basket slides and is hard to stop
 };
 
 struct StickyPuddle {
@@ -39,7 +30,62 @@ struct StickyPuddle {
     double radius{3.5};
     int lifeTicks{350};
     int maxLifeTicks{350};
+    PatchType type{PatchType::SLIME};
+    int ageTicks{0};
+
+    static constexpr int FORM_TICKS = 22; // Mud / ice visibly form before they bite
+    static constexpr int MELT_TICKS = 45; // ...and shrink away at the end of their life
+
+    // Effective radius used by BOTH physics and rendering so what you see is what you get.
+    // Slime keeps its original constant radius; mud and ice grow in and shrink out.
+    double currentRadius() const {
+        if (type == PatchType::SLIME) {
+            return radius;
+        }
+        const double grow = ageTicks >= FORM_TICKS ? 1.0 : static_cast<double>(ageTicks) / FORM_TICKS;
+        const double fade = lifeTicks >= MELT_TICKS ? 1.0 : static_cast<double>(lifeTicks) / MELT_TICKS;
+        const double f = grow < fade ? grow : fade;
+        return radius * f;
+    }
+    bool isForming() const { return type != PatchType::SLIME && ageTicks < FORM_TICKS; }
 };
+
+// Gust life-cycle: calm -> telegraphed warning -> blowing
+enum class WindPhase {
+    CALM,
+    WARNING,
+    GUST
+};
+
+// Boss fight life-cycle (a boss appears every 10 levels)
+enum class BossPhase {
+    NONE,      // No boss: normal play
+    PENDING,   // Boss level reached; waiting for the sky to clear before the intro
+    INTRO,     // Warning banner, boss descends
+    FIGHT,     // Active fight
+    DEFEATED   // Boss beaten: victory burst, trophy egg, boss flies away
+};
+
+// Grand drifting pixel clouds shared between physics and rendering
+struct CloudBankDef {
+    int speedDivider;
+    int tickOffset;
+    int relY;
+    int width;
+    int height;
+};
+
+inline constexpr int NUM_CLOUD_BANKS = 4;
+
+inline const CloudBankDef& getCloudDef(int index) {
+    static const CloudBankDef clouds[NUM_CLOUD_BANKS] = {
+        { 5,  15, -16, 48, 14 },
+        { 7, 140, -26, 40, 12 },
+        { 4, 270, -38, 54, 15 },
+        { 6, 390, -20, 36, 11 }
+    };
+    return clouds[(index >= 0 ? index : -index) % NUM_CLOUD_BANKS];
+}
 
 struct CompanionBasket {
     bool active{false};
@@ -81,7 +127,12 @@ enum class SoundId {
     GAME_OVER,           // Player loses all hearts (Game Over)
     GROW_USE,            // 'H' key used to expand basket
     COMPANION_SPAWN,     // 'C' key used to summon companion basket
-    UI_CLICK             // Button click, mode toggle, pause toggle
+    UI_CLICK,            // Button click, mode toggle, pause toggle
+    BOSS_WARNING,        // Boss incoming siren
+    BOSS_HIT,            // Boss takes damage from a caught egg
+    BOSS_DEFEAT,         // Boss defeated fanfare
+    WIND_GUST,           // A gust of wind begins
+    FROST_FORM           // Ice patch crystallises on the ground
 };
 
 #endif // GAMETYPES_H

@@ -245,5 +245,56 @@ void rasterizeEgg(MyPixels &pixels, const FallingEgg &egg)
         pixels.setPixel(ex, ey - 4, goldCrown);
         pixels.setPixel(ex + 1, ey - 4, goldBorder);
     }
+    else if (egg.type == EggType::BOSS_REWARD)
+    {
+        // 9x11 Royal Trophy Egg: amethyst shell, gold filigree, jewelled crown and a pulsing star
+        const QColor gold(255, 214, 10);
+        const QColor goldDeep(184, 134, 11);
+        const QColor amethyst(142, 68, 173);
+        const QColor amethystLight(187, 134, 252);
+        const QColor amethystDark(74, 35, 90);
+        const QColor ruby(239, 71, 111);
+        const QColor glint = (egg.animTick % 8 < 4) ? QColor(255, 255, 255) : QColor(255, 245, 157);
+
+        // Crown (three points + ruby)
+        pixels.setPixel(ex - 2, ey + 5, gold);
+        pixels.setPixel(ex, ey + 5, glint);
+        pixels.setPixel(ex + 2, ey + 5, gold);
+        for (int x = ex - 2; x <= ex + 2; ++x)
+        {
+            pixels.setPixel(x, ey + 4, (x == ex) ? ruby : gold);
+        }
+
+        // Shell rows
+        auto shellRow = [&](int y, int halfW, bool star) {
+            for (int x = -halfW; x <= halfW; ++x)
+            {
+                QColor c = amethyst;
+                if (x == -halfW || x == halfW) c = goldDeep;
+                else if (x < 0) c = amethystLight;
+                else if (x > 1) c = amethystDark;
+                if (star && std::abs(x) <= 1) c = glint;
+                pixels.setPixel(ex + x, y, c);
+            }
+        };
+        shellRow(ey + 3, 2, false);
+        shellRow(ey + 2, 3, false);
+        shellRow(ey + 1, 3, true);
+        shellRow(ey, 3, true);   // star body
+        shellRow(ey - 1, 3, true);
+        shellRow(ey - 2, 3, false);
+        shellRow(ey - 3, 2, false);
+
+        // Star arms
+        pixels.setPixel(ex, ey + 2, glint);
+        pixels.setPixel(ex, ey - 2, glint);
+        pixels.setPixel(ex - 2, ey, glint);
+        pixels.setPixel(ex + 2, ey, glint);
+
+        // Gold base ring
+        pixels.setPixel(ex - 1, ey - 4, goldDeep);
+        pixels.setPixel(ex, ey - 4, gold);
+        pixels.setPixel(ex + 1, ey - 4, goldDeep);
+    }
 }
 

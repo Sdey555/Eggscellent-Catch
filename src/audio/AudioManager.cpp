@@ -33,6 +33,11 @@ void AudioManager::init()
     setupSoundPool(SoundId::GROW_USE, "sfx_grow_use.wav", 1);
     setupSoundPool(SoundId::COMPANION_SPAWN, "sfx_companion_spawn.wav", 1);
     setupSoundPool(SoundId::UI_CLICK, "sfx_ui_click.wav", 2);
+    setupSoundPool(SoundId::BOSS_WARNING, "sfx_boss_warning.wav", 1);
+    setupSoundPool(SoundId::BOSS_HIT, "sfx_boss_hit.wav", 3);
+    setupSoundPool(SoundId::BOSS_DEFEAT, "sfx_boss_defeat.wav", 1);
+    setupSoundPool(SoundId::WIND_GUST, "sfx_wind_gust.wav", 1);
+    setupSoundPool(SoundId::FROST_FORM, "sfx_frost_form.wav", 1);
 }
 
 QUrl AudioManager::resolveAudioUrl(const QString &fileName)
