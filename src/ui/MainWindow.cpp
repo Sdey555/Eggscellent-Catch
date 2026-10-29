@@ -420,6 +420,13 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if (key == Qt::Key_Space || key == Qt::Key_Down || key == Qt::Key_B || key == Qt::Key_F)
+    {
+        engine.defend();
+        redrawPixels();
+        return;
+    }
+
     if (key == Qt::Key_H)
     {
         engine.useGrowthEgg();
@@ -1077,6 +1084,44 @@ void MainWindow::onMouseLeftClicked()
     }
 
     // 5. PLAYING STATE
+    // 5.0 Defend Button [ 🛡️ DEFEND ] or direct tap on basket/attacking bird
+    const QRect defRect = GameRenderer::getDefendButtonRect(width, height);
+    if (defRect.contains(clickPos))
+    {
+        engine.defend();
+        redrawPixels();
+        return;
+    }
+
+    // Direct tap on the basket or attacking bird triggers defense
+    const int basketScreenX = myGrid.mathToScreenX(static_cast<int>(std::round(engine.getBasket().mathX)));
+    const int basketScreenY = myGrid.mathToScreenY(engine.getBasket().mathY);
+    const int basketW = std::max(40, engine.getBasket().halfWidth * 2 * scale);
+    const int basketH = std::max(28, engine.getBasket().height * scale);
+    const QRect basketHitArea(basketScreenX - basketW / 2, basketScreenY - basketH, basketW, basketH + scale * 4);
+    if (basketHitArea.contains(clickPos))
+    {
+        engine.defend();
+        redrawPixels();
+        return;
+    }
+
+    for (const auto &bird : engine.getBirds())
+    {
+        if (bird.attackState == Bird::AttackState::TELEGRAPH || bird.attackState == Bird::AttackState::DIVE)
+        {
+            const int bsx = myGrid.mathToScreenX(static_cast<int>(std::round(bird.mathX)));
+            const int bsy = myGrid.mathToScreenY(static_cast<int>(std::round(bird.mathY)));
+            const QRect birdHitArea(bsx - scale * 8, bsy - scale * 6, scale * 16, scale * 14);
+            if (birdHitArea.contains(clickPos))
+            {
+                engine.defend();
+                redrawPixels();
+                return;
+            }
+        }
+    }
+
     // 5.1 Pause Button
     const QRect pauseRect = GameRenderer::getPauseButtonRect(width, height);
     if (pauseRect.contains(clickPos))
@@ -1149,5 +1194,11 @@ void MainWindow::onMouseLeftReleased()
 
 void MainWindow::onMouseRightClicked()
 {
+    if (engine.getState() == GameState::PLAYING)
+    {
+        engine.defend();
+        redrawPixels();
+        return;
+    }
     togglePause();
 }

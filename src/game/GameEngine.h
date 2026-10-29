@@ -55,6 +55,7 @@ public:
     void cycleMode(const MyGrid &grid);
     void useGrowthEgg();           // Triggered by 'H' key
     void summonCompanionBasket();   // Triggered by 'C' key (Hard mode)
+    void defend();                  // Defend basket against swooping bird attack ([SPACE] / Tap)
 
     // Audio Callback
     using SoundCallback = std::function<void(SoundId)>;
@@ -130,10 +131,14 @@ public:
     int getLightningStrikeTimer() const { return lightningStrikeTimer; }
     double getLightningStrikeX() const { return lightningStrikeX; }
 
+    // Bird Attack & Basket Defense
+    bool isBasketDefending() const { return basketDefending; }
+    int getBasketDefendCooldown() const { return basketDefendCooldown; }
+
     // ---------------------------------------------------------
-    // Boss fights (level 3, then every 10 levels)
+    // Boss fights (every 10 levels: 10, 20, 30, 40, 50)
     // ---------------------------------------------------------
-    static bool isBossLevel(int lvl) { return lvl == 3 || (lvl >= 10 && lvl % 10 == 0 && lvl <= MAX_LEVEL); }
+    static bool isBossLevel(int lvl) { return (lvl >= 10 && lvl % 10 == 0 && lvl <= MAX_LEVEL); }
     BossPhase getBossPhase() const { return bossPhase; }
     bool isBossActive() const { return bossPhase != BossPhase::NONE; }
     const BossBird& getBoss() const { return boss; }
@@ -212,6 +217,12 @@ private:
     int lightningStrikeState{0}; // 0 = idle, 1 = warning sizzle, 2 = striking
     int lightningStrikeTimer{0};
     double lightningStrikeX{0.0};
+
+    // Bird Attack & Basket Defense (From Level 1 onwards)
+    int birdAttackCooldownTicks{280};
+    bool basketDefending{false};
+    int basketDefendTicks{0};
+    int basketDefendCooldown{0};
 
     bool keyLeftPressed{false};
     bool keyRightPressed{false};

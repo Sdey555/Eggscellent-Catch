@@ -459,7 +459,7 @@ void GameRenderer::renderPixelSky(QPainter &painter, const MyGrid &grid, int sca
 }
 
 void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
-                                    int minMathX, int maxMathX, int maxMathY, int hudTick,
+                                    int minMathX, int maxMathX, int maxMathY, int cloudTick,
                                     double dayNightProgress, double nightRatio, bool isStorm)
 {
     Q_UNUSED(width);
@@ -504,7 +504,7 @@ void GameRenderer::renderPixelClouds(QPainter &painter, const MyGrid &grid, int 
     for (int i = 0; i < NUM_CLOUD_BANKS; ++i)
     {
         const auto &cd = getCloudDef(i);
-        const int cx = minMathX - 45 + ((hudTick / cd.speedDivider) + cd.tickOffset) % mathSpan;
+        const int cx = minMathX - 45 + ((cloudTick / cd.speedDivider) + cd.tickOffset) % mathSpan;
         const int cy = maxMathY + cd.relY;
 
         for (int col = 0; col < cd.width; ++col)
@@ -1237,27 +1237,78 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     renderPixelSky(painter, grid, scale, width, height, minMathX, maxMathX, minMathY, maxMathY,
                    engine.getGroundMathY(), dnProg, nightRatio, isStorm, flashTicks, hudTick);
 
-    // 2. Grand drifting pixel clouds (rendered in background when not storming)
-    if (!isStorm)
-    {
-        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, hudTick,
-                          dnProg, nightRatio, isStorm);
-    }
-
-    // 3. Mountains & Hills (with ZERO gaps, fills completely to groundMathY)
+    // 2. Mountains & Hills (with ZERO gaps, fills completely to groundMathY)
     renderPixelHills(painter, grid, scale, width, height, minMathX, maxMathX, engine.getGroundMathY(),
                      dnProg, nightRatio, isStorm);
 
-    // 4. Farmhouse & barn elevated on midground knoll
+    // 3. Farmhouse & barn elevated on midground knoll
     renderPixelFarmhouse(painter, grid, scale, width, height, engine.getGroundMathY(), hudTick,
                          dnProg, nightRatio, isStorm);
 
-    // 5. Rustic wooden fence
+    // 4. Rustic wooden fence
     renderPixelFence(painter, grid, scale, width, height, minMathX, maxMathX, engine.getGroundMathY(),
                      dnProg, nightRatio, isStorm);
 
-    // 6. Sticky Poop Puddles on the ground
+    // 5. Sticky Poop Puddles on the ground
     renderStickyPuddles(painter, grid, scale, width, height, engine.getStickyPuddles(), engine.getGroundMathY(), hudTick);
+
+    // -------------------------------------------------------------
+    // MIDGROUND: BIRDS PASS (Rendered behind drifting clouds)
+    // -------------------------------------------------------------
+    MyPixels birdPixels;
+
+    for (const auto &bird : engine.getBirds())
+    {
+        rasterizeBird(birdPixels, bird);
+    }
+
+    if (engine.isLegendaryBirdActive())
+    {
+        rasterizeBird(birdPixels, engine.getLegendaryBird());
+    }
+
+    if (engine.getBoss().present)
+    {
+        rasterizeBossBird(birdPixels, engine.getBoss());
+    }
+
+    for (const auto &entry : birdPixels.getPixelMap())
+    {
+        const int x = static_cast<int>(entry.first >> 32);
+        const int y = static_cast<int>(entry.first & 0xFFFFFFFFLL);
+        paintCell(painter, grid, scale, width, height, x, y, entry.second);
+    }
+
+    // -------------------------------------------------------------
+    // BIRD ATTACK TELEGRAPH BEAM & GROUND TARGET RETICLE
+    // -------------------------------------------------------------
+    for (const auto &bird : engine.getBirds())
+    {
+        if (bird.attackState == Bird::AttackState::TELEGRAPH)
+        {
+            const int bx = grid.mathToScreenX(static_cast<int>(std::round(bird.mathX)));
+            const int by = grid.mathToScreenY(static_cast<int>(std::round(bird.mathY)));
+            const int tx = grid.mathToScreenX(static_cast<int>(std::round(bird.attackTargetX)));
+            const int ty = grid.mathToScreenY(engine.getGroundMathY() + 1);
+
+            const int pulseAlpha = (bird.attackTicks % 8 < 4) ? 140 : 60;
+            QPen laserPen(QColor(255, 30, 30, pulseAlpha), std::max(1, scale / 2), Qt::DashLine);
+            painter.setPen(laserPen);
+            painter.drawLine(bx + scale / 2, by + scale / 2, tx + scale / 2, ty + scale / 2);
+
+            // Ground warning target box
+            const int rSize = scale * 10;
+            painter.setPen(QPen(QColor(255, 50, 50, pulseAlpha + 50), 2));
+            painter.setBrush(QColor(255, 30, 30, pulseAlpha / 3));
+            painter.drawRect(tx - rSize / 2, ty - scale * 2, rSize, scale * 3);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // DRIFTING PIXEL CLOUDS (Rendered in front of birds so birds hide behind clouds)
+    // -------------------------------------------------------------
+    renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY,
+                      engine.getDayNightTick(), dnProg, nightRatio, isStorm);
 
     // -------------------------------------------------------------
     // FOREGROUND RASTERIZATION PASS
@@ -1266,24 +1317,6 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
 
     // Ground
     rasterizeGround(pixels, minMathX, maxMathX, engine.getGroundMathY(), minMathY);
-
-    // Birds (If storm is active, birds fly high in the clouds)
-    for (const auto &bird : engine.getBirds())
-    {
-        rasterizeBird(pixels, bird);
-    }
-
-    // Special Legendary Phoenix
-    if (engine.isLegendaryBirdActive())
-    {
-        rasterizeBird(pixels, engine.getLegendaryBird());
-    }
-
-    // Boss bird (level 3, then every 10 levels)
-    if (engine.getBoss().present)
-    {
-        rasterizeBossBird(pixels, engine.getBoss());
-    }
 
     // Player Basket
     rasterizeBasket(pixels, engine.getBasket());
@@ -1543,10 +1576,6 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     // -------------------------------------------------------------
     if (isStorm)
     {
-        // Birds retreated into the storm clouds; thick storm clouds cover them from the front!
-        renderPixelClouds(painter, grid, scale, width, height, minMathX, maxMathX, maxMathY, hudTick,
-                          dnProg, nightRatio, isStorm);
-
         // Torrential pixel rain streaks across the viewport
         for (int rx = minMathX; rx <= maxMathX; rx += 4)
         {
@@ -1988,6 +2017,8 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             y += 18;
             painter.drawText(colX, y, "• Avoid bird poop! Catching poop loses 1 heart (-1 ❤).");
             y += 18;
+            painter.drawText(colX, y, "• Birds attack from Level 1! DEFEND with [SPACE] / [🛡️] or DODGE!");
+            y += 18;
             painter.drawText(colX, y, "• Catch Green Growth Eggs to store in inventory (Use with [H])!");
             y += 18;
             painter.setFont(boldBodyFont);
@@ -2005,6 +2036,8 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
             painter.setFont(bodyFont);
             painter.setPen(QColor(224, 230, 237));
             painter.drawText(colX, y, "• Move Basket : Touch / Drag / Mouse / [A / D] / [Left / Right]");
+            y += 18;
+            painter.drawText(colX, y, "• Defend Basket : Press [SPACE] / Right-Click / 🛡️ DEFEND button");
             y += 18;
             painter.drawText(colX, y, "• Use Growth Egg : Press [H] or 🧺 Button (Expands basket)");
             y += 18;
@@ -2240,6 +2273,14 @@ QRect GameRenderer::getCompanionButtonRect(int width, int height)
     return QRect(width - (sz * 2) - 30, height - btnH - sz - 26, sz, sz);
 }
 
+QRect GameRenderer::getDefendButtonRect(int width, int height)
+{
+    const int btnH = std::clamp(height / 7, 52, 72);
+    const int sz = std::clamp(height / 9, 42, 54);
+    const int defW = std::clamp(width / 7, 84, 115);
+    return QRect(16, height - btnH - sz - 26, defW, sz);
+}
+
 void GameRenderer::renderOnScreenControls(QPainter &painter, const GameEngine &engine, int width, int height)
 {
     // 1. Pause Button [ ⏸ ]
@@ -2282,7 +2323,40 @@ void GameRenderer::renderOnScreenControls(QPainter &painter, const GameEngine &e
         painter.drawText(QRect(cRect.x(), cRect.y() + 22, cRect.width(), 16), Qt::AlignCenter, "SUMMON");
     }
 
-    // 4. Mode-Specific Overlays
+    // 4. Defend Button [ 🛡️ DEFEND ]
+    {
+        const QRect defRect = getDefendButtonRect(width, height);
+        const bool isDefending = engine.isBasketDefending();
+        const bool canDefend = engine.getBasketDefendCooldown() <= 0;
+
+        if (isDefending)
+        {
+            painter.setPen(QPen(QColor(0, 255, 255), 2.5));
+            painter.setBrush(QColor(0, 180, 216, 220));
+        }
+        else if (canDefend)
+        {
+            painter.setPen(QPen(QColor(0, 229, 255, 200), 1.8));
+            painter.setBrush(QColor(16, 32, 52, 200));
+        }
+        else
+        {
+            painter.setPen(QPen(QColor(70, 80, 100, 140), 1.0));
+            painter.setBrush(QColor(16, 20, 28, 160));
+        }
+        painter.drawRoundedRect(defRect, 8, 8);
+
+        QFont defFont = painter.font();
+        defFont.setBold(true);
+        defFont.setPixelSize(std::clamp(defRect.height() / 3, 11, 14));
+        painter.setFont(defFont);
+        painter.setPen(isDefending ? QColor(255, 255, 255) : (canDefend ? QColor(0, 229, 255) : QColor(140, 150, 170)));
+
+        QString defText = isDefending ? "🛡️ SHIELD!" : (canDefend ? "🛡️ DEFEND" : "🛡️ WAIT");
+        painter.drawText(defRect, Qt::AlignCenter, defText);
+    }
+
+    // 5. Mode-Specific Overlays
     const ControlMode mode = engine.getControlMode();
     if (mode == ControlMode::VIRTUAL_BUTTONS)
     {

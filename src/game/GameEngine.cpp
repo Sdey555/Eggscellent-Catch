@@ -38,6 +38,12 @@ void GameEngine::init(const MyGrid &grid)
     lightningStrikeTimer = 0;
     lightningStrikeX = 0.0;
 
+    birdAttackCooldownTicks = 280;
+    basketDefending = false;
+    basketDefendTicks = 0;
+    basketDefendCooldown = 0;
+    basket.isDefending = false;
+
     companionBasket.active = false;
     companionBasket.ticksLeft = 0;
 
@@ -96,7 +102,7 @@ void GameEngine::init(const MyGrid &grid)
     // Initialize Basket
     basket.mathX = (minMathX + maxMathX) / 2.0;
     basket.mathY = groundMathY + 1;
-    basket.halfWidth = 9;
+    basket.halfWidth = 10;
     basket.height = 7;
     basket.speed = std::clamp(screenSpan / 70.0, 1.8, 5.5);
     mouseScreenX = width / 2;
@@ -174,7 +180,7 @@ void GameEngine::useGrowthEgg()
     }
 
     growthEggCount--;
-    basket.halfWidth = std::min(10, basket.halfWidth + 2); // Widen basket!
+    basket.halfWidth = std::min(12, basket.halfWidth + 2); // Widen basket!
     spawnCatchParticles(basket.mathX, basket.mathY + basket.height, QColor(46, 204, 113), 24);
     addFloatingText(basket.mathX, basket.mathY + basket.height + 4.0, "🧺 SIZE UP! 🧺", QColor(46, 204, 113));
     statusMessage = QString("🌟 Used 1 Growth Egg! Basket expanded! (%1 in inventory)").arg(growthEggCount);
@@ -221,6 +227,27 @@ void GameEngine::summonCompanionBasket()
     addFloatingText(companionBasket.mathX, groundMathY + 12.0, "🤖 COMPANION ACTIVE (5s)! 🤖", QColor(0, 229, 255));
     statusMessage = "🤖 COMPANION BASKET SUMMONED! Catching eggs automatically for 5 seconds!";
     triggerSound(SoundId::COMPANION_SPAWN);
+}
+
+void GameEngine::defend()
+{
+    if (gameState != GameState::PLAYING)
+    {
+        return;
+    }
+
+    if (basketDefendCooldown > 0)
+    {
+        return;
+    }
+
+    basketDefending = true;
+    basketDefendTicks = 25;      // ~0.8s active block duration
+    basketDefendCooldown = 45;   // ~1.4s cooldown
+    basket.isDefending = true;
+
+    spawnCatchParticles(basket.mathX, basket.mathY + basket.height + 2.0, QColor(0, 229, 255), 18);
+    triggerSound(SoundId::UI_CLICK);
 }
 
 const FallingEgg& GameEngine::getFallingEgg() const
@@ -444,7 +471,6 @@ Bird GameEngine::createBird(size_t index, const MyGrid &grid)
 
 void GameEngine::applyLevelSettings(const MyGrid &grid)
 {
-    basket.halfWidth = std::max(2, 9 - (level - 1));
     basket.height = 7;
 
     // For Med and Hard mode, start with TWO birds! Easy starts with 1.
@@ -488,9 +514,14 @@ void GameEngine::checkLevelUp(const MyGrid &grid)
     }
 
     const int levelsGained = newLevel - level;
+    const int oldShrinkTier = (level - 1) / 2;
+    const int newShrinkTier = (newLevel - 1) / 2;
+    const int shrinkAmount = newShrinkTier - oldShrinkTier;
+    if (shrinkAmount > 0)
+    {
+        basket.halfWidth = std::max(6, basket.halfWidth - shrinkAmount);
+    }
     level = newLevel;
-
-    basket.halfWidth = std::max(2, basket.halfWidth - levelsGained);
     levelBannerTicks = 60; // ~1.8s banner
 
     const double rimY = basket.mathY + basket.height;
@@ -779,6 +810,18 @@ void GameEngine::updatePhysics(const MyGrid &grid)
         }
     }
 
+    // Active Basket Defense Timers
+    if (basketDefendTicks > 0)
+    {
+        basketDefendTicks--;
+        basketDefending = (basketDefendTicks > 0);
+    }
+    if (basketDefendCooldown > 0)
+    {
+        basketDefendCooldown--;
+    }
+    basket.isDefending = basketDefending;
+
     basket.speed = effectiveSpeed;
 
     if (levelBannerTicks > 0)
@@ -930,13 +973,207 @@ void GameEngine::updateBirds(const MyGrid &grid)
     const int numGaps = std::max(1, static_cast<int>(birds.size() - 1));
     const int verticalSpacing = (birds.size() <= 1) ? 0 : std::clamp(availableSpan / numGaps, 18, 28);
 
+    // -------------------------------------------------------------
+    // BIRD ATTACK DISPATCHER (From Level 1 onwards!)
+    // -------------------------------------------------------------
+    const bool bossHides = (bossPhase == BossPhase::INTRO || bossPhase == BossPhase::FIGHT || bossPhase == BossPhase::DEFEATED);
+    if (!bossHides && !thunderstormActive && !legendaryBirdActive && gameState == GameState::PLAYING)
+    {
+        bool anyAttacking = false;
+        for (const auto &b : birds)
+        {
+            if (b.attackState != Bird::AttackState::NONE)
+            {
+                anyAttacking = true;
+                break;
+            }
+        }
+
+        if (!anyAttacking)
+        {
+            birdAttackCooldownTicks--;
+            if (birdAttackCooldownTicks <= 0)
+            {
+                std::vector<size_t> eligible;
+                for (size_t idx = 0; idx < birds.size(); ++idx)
+                {
+                    if (!birds[idx].isLaying && !birds[idx].inCloud && !birds[idx].inFogDive &&
+                        birds[idx].mathX >= minMathX + 14.0 && birds[idx].mathX <= maxMathX - 14.0)
+                    {
+                        eligible.push_back(idx);
+                    }
+                }
+
+                if (!eligible.empty())
+                {
+                    size_t chosenIdx = eligible[rng() % eligible.size()];
+                    Bird &attacker = birds[chosenIdx];
+                    attacker.attackState = Bird::AttackState::TELEGRAPH;
+                    attacker.attackTicks = 0;
+                    attacker.attackStartX = attacker.mathX;
+                    attacker.attackStartY = attacker.mathY;
+                    attacker.attackTargetX = basket.mathX;
+                    attacker.attackTargetY = groundMathY + 1.0;
+                    triggerSound(SoundId::BOSS_WARNING);
+                    addFloatingText(attacker.mathX, attacker.mathY + 4.0, "⚠️ WATCH OUT! ⚠️", QColor(255, 23, 68));
+                    statusMessage = "⚠️ BIRD ATTACK! Defend with [SPACE] / [DEFEND] or DODGE!";
+
+                    const int baseInterval = std::max(180, 360 - (level - 1) * 8);
+                    birdAttackCooldownTicks = baseInterval + (rng() % 90);
+                }
+                else
+                {
+                    birdAttackCooldownTicks = 45; // Retry shortly
+                }
+            }
+        }
+    }
+
     for (size_t i = 0; i < birds.size(); ++i)
     {
         Bird &bird = birds[i];
 
+        // During a boss fight or storm, birds retreat and abort any pending attack
+        if (bossHides || thunderstormActive)
+        {
+            bird.attackState = Bird::AttackState::NONE;
+            bird.attackTicks = 0;
+        }
+
+        // -------------------------------------------------------------
+        // ACTIVE BIRD ATTACK STATE MACHINE
+        // -------------------------------------------------------------
+        if (bird.attackState != Bird::AttackState::NONE)
+        {
+            bird.attackTicks++;
+
+            if (bird.attackState == Bird::AttackState::TELEGRAPH)
+            {
+                bird.animTick++;
+                if (bird.attackTicks % 3 == 0)
+                {
+                    bird.wingFrame = (bird.wingFrame + 1) % 3;
+                }
+
+                // Track basket position during early telegraph, then lock in
+                if (bird.attackTicks < 25)
+                {
+                    bird.attackTargetX += (basket.mathX - bird.attackTargetX) * 0.15;
+                }
+
+                // Warning hover quiver
+                bird.mathX = bird.attackStartX + (bird.attackTicks % 2 == 0 ? 0.35 : -0.35);
+
+                if (bird.attackTicks >= 42) // ~1.3s telegraph
+                {
+                    bird.attackState = Bird::AttackState::DIVE;
+                    bird.attackTicks = 0;
+                    bird.direction = (bird.attackTargetX >= bird.mathX) ? 1 : -1;
+                    triggerSound(SoundId::WIND_GUST);
+                }
+                continue;
+            }
+            else if (bird.attackState == Bird::AttackState::DIVE)
+            {
+                const double totalDiveTicks = 18.0;
+                const double t = std::clamp(static_cast<double>(bird.attackTicks) / totalDiveTicks, 0.0, 1.0);
+
+                bird.mathX = bird.attackStartX + (bird.attackTargetX - bird.attackStartX) * t;
+                const double targetImpactY = groundMathY + 1.0;
+                bird.mathY = bird.attackStartY + (targetImpactY - bird.attackStartY) * (t * t);
+
+                if (dayNightTick % 2 == 0)
+                {
+                    GameParticle p;
+                    p.x = bird.mathX;
+                    p.y = bird.mathY + 2.0;
+                    p.vx = -bird.direction * 0.12;
+                    p.vy = 0.25;
+                    p.color = QColor(255, 235, 59, 180);
+                    p.life = 6;
+                    p.maxLife = 6;
+                    particles.push_back(p);
+                }
+
+                // Check collision at bottom of dive
+                if (t >= 0.95 || bird.mathY <= groundMathY + 2.2)
+                {
+                    const double deltaX = std::abs(bird.mathX - basket.mathX);
+                    const bool inBasket = (deltaX <= basket.halfWidth + 1.2);
+
+                    if (inBasket)
+                    {
+                        if (basketDefending)
+                        {
+                            // DEFENDED! Shield deflected the attack!
+                            score += 50;
+                            highScore = std::max(highScore, score);
+                            addFloatingText(basket.mathX, basket.mathY + basket.height + 4.0, "🛡️ DEFENDED! +50 🛡️", QColor(0, 229, 255));
+                            statusMessage = "🛡️ Clang! Bird attack blocked with basket shield! +50 pts";
+                            spawnCatchParticles(bird.mathX, bird.mathY, QColor(0, 229, 255), 28);
+                            triggerSound(SoundId::UI_CLICK);
+                        }
+                        else
+                        {
+                            // HIT! 1 Heart Lost!
+                            hearts--;
+                            shake(12, 2);
+                            spawnSplatParticles(bird.mathX, groundMathY + 1, EggType::BIRD_POOP);
+                            triggerSound(SoundId::POOP_HIT);
+
+                            if (hearts <= 0)
+                            {
+                                hearts = 0;
+                                gameOverReason = "Defeated by swooping bird attack! Defend or dodge!";
+                                gameState = GameState::GAME_OVER;
+                                statusMessage = "Game Over! A swooping bird attacked your basket!";
+                                triggerSound(SoundId::GAME_OVER);
+                            }
+                            else
+                            {
+                                addFloatingText(basket.mathX, basket.mathY + basket.height + 3.0, "💥 ATTACKED! -1 ❤", QColor(231, 76, 60));
+                                statusMessage = QString("💥 Bird attacked the basket! Lost 1 heart (%1 left).").arg(hearts);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // DODGED!
+                        score += 25;
+                        highScore = std::max(highScore, score);
+                        addFloatingText(bird.mathX, groundMathY + 3.0, "💨 DODGED! +25", QColor(46, 204, 113));
+                        statusMessage = "💨 Swoosh! You dodged the bird's dive attack! +25 pts";
+                        spawnCatchParticles(bird.mathX, groundMathY + 1, QColor(141, 110, 99), 16);
+                        triggerSound(SoundId::WIND_GUST);
+                    }
+
+                    bird.attackState = Bird::AttackState::RECOVER;
+                    bird.attackTicks = 0;
+                    bird.attackStartX = bird.mathX;
+                    bird.attackStartY = bird.mathY;
+                }
+                continue;
+            }
+            else if (bird.attackState == Bird::AttackState::RECOVER)
+            {
+                const double totalRecoverTicks = 26.0;
+                const double t = std::clamp(static_cast<double>(bird.attackTicks) / totalRecoverTicks, 0.0, 1.0);
+                const double cruiseY = std::max(bottomY, topY - static_cast<int>(i * verticalSpacing));
+
+                bird.mathY = bird.attackStartY + (cruiseY - bird.attackStartY) * (1.0 - (1.0 - t) * (1.0 - t));
+                bird.mathX += bird.direction * 0.50;
+
+                if (t >= 1.0)
+                {
+                    bird.attackState = Bird::AttackState::NONE;
+                    bird.attackTicks = 0;
+                }
+                continue;
+            }
+        }
+
         // While thunderstorm, birds retreat into the shelter of high storm clouds!
         // During a boss fight the flock bolts out of the top of the sky.
-        const bool bossHides = (bossPhase == BossPhase::INTRO || bossPhase == BossPhase::FIGHT || bossPhase == BossPhase::DEFEATED);
         int targetY;
         if (bossHides)
         {
@@ -1025,8 +1262,8 @@ void GameEngine::updateBirds(const MyGrid &grid)
                 const int cy = maxMathY + cd.relY;
 
                 // Cloud bounds check (bird body within cloud dome)
-                if (bird.mathX >= cx + 4.0 && bird.mathX <= cx + cd.width - 4.0 &&
-                    bird.mathY >= cy - 2.0 && bird.mathY <= cy + cd.height + 4.0)
+                if (bird.mathX >= cx + 5.0 && bird.mathX <= cx + cd.width - 5.0 &&
+                    bird.mathY >= cy - 1.0 && bird.mathY <= cy + cd.height + 2.0)
                 {
                     insideCloud = true;
                     cloudUnderY = cy;
@@ -1365,7 +1602,7 @@ void GameEngine::updateEggSpawn(const MyGrid &grid)
         eggSpawnCooldown--;
         if (eggSpawnCooldown <= 0)
         {
-            const bool restoreDue = (level >= 10 && (level - lastRestoreEggLevel >= 10) && basket.halfWidth < 9);
+            const bool restoreDue = (level >= 10 && (level - lastRestoreEggLevel >= 10) && basket.halfWidth < 10);
             if (restoreDue && !legendaryBirdActive)
             {
                 int restoreChance = (mode == GameMode::HARD ? 18 : (mode == GameMode::MEDIUM ? 25 : 35));
@@ -1404,23 +1641,25 @@ void GameEngine::updateEggSpawn(const MyGrid &grid)
                 eggSpawnCooldown = cooldownDist(rng);
 
                 auto pickEggType = [this, tier]() -> EggType {
-                    const bool basketIsSmall = (basket.halfWidth <= 6);
-                    const bool growCooldownPassed = (lastGrowEggMissLevel == 0 || (level - lastGrowEggMissLevel >= 4));
-                    
-                    int growChance = (mode == GameMode::HARD ? 10 : (mode == GameMode::MEDIUM ? 18 : 22));
+                    // Growth egg spawns regularly and scales up if basket has shrunk
+                    int baseGrowChance = (mode == GameMode::HARD ? 14 : (mode == GameMode::MEDIUM ? 18 : 24));
+                    if (growthEggCount == 0)
+                    {
+                        baseGrowChance += 8; // Extra boost if inventory is empty
+                    }
+                    const int deficit = std::max(0, 10 - basket.halfWidth);
+                    const int growChance = std::min(60, baseGrowChance + deficit * 7);
+
+                    std::uniform_int_distribution<int> growRollDist(0, 99);
+                    if (growRollDist(rng) < growChance)
+                    {
+                        return EggType::BASKET_GROW;
+                    }
+
                     int goldenPct = (mode == GameMode::HARD ? 10 : (mode == GameMode::MEDIUM ? 14 : 18));
                     int poopPct = (mode == GameMode::HARD ? std::min(60, 28 + tier * 3)
                                                          : (mode == GameMode::MEDIUM ? std::min(50, 20 + tier * 2)
                                                                                      : std::min(45, 15 + tier * 2)));
-
-                    if (basketIsSmall && growCooldownPassed)
-                    {
-                        std::uniform_int_distribution<int> growRollDist(0, 99);
-                        if (growRollDist(rng) < growChance)
-                        {
-                            return EggType::BASKET_GROW;
-                        }
-                    }
 
                     const int regularPct = std::max(10, 100 - goldenPct - poopPct);
                     std::uniform_int_distribution<int> typeDist(0, 99);
@@ -1564,7 +1803,7 @@ void GameEngine::updateFallingEggs(const MyGrid &grid)
                 {
                     score += 100;
                     highScore = std::max(highScore, score);
-                    basket.halfWidth = 9;
+                    basket.halfWidth = 10;
                     spawnCatchParticles(egg.mathX, rimY, QColor(0, 229, 255), 36);
                     addFloatingText(basket.mathX, rimY + 4.0, "🌈 FULL RECOVERY! +100 🌈", QColor(0, 229, 255));
                     statusMessage = "🌈 LEGENDARY RECOVERY! Basket restored to full starting size! +100 pts";
@@ -1574,7 +1813,7 @@ void GameEngine::updateFallingEggs(const MyGrid &grid)
                 {
                     score += 100;
                     highScore = std::max(highScore, score);
-                    basket.halfWidth = std::min(9, basket.halfWidth + 3);
+                    basket.halfWidth = std::min(12, basket.halfWidth + 3);
                     QString perk;
                     if (hearts < 3)
                     {
@@ -1745,10 +1984,9 @@ void GameEngine::updateFallingEggs(const MyGrid &grid)
             }
             else if (egg.type == EggType::BASKET_GROW)
             {
-                lastGrowEggMissLevel = level;
                 spawnCatchParticles(egg.mathX, groundMathY + 1, QColor(46, 204, 113), 16);
-                addFloatingText(egg.mathX, groundMathY + 3.0, "MISSED! COOLDOWN: 4 LVLS", QColor(231, 76, 60));
-                statusMessage = QString("Growth egg broke! No growth eggs for at least 4 levels (until Level %1).").arg(level + 4);
+                addFloatingText(egg.mathX, groundMathY + 3.0, "GROWTH EGG BROKE!", QColor(231, 76, 60));
+                statusMessage = "Growth egg broke on the ground! Keep catching!";
                 triggerSound(SoundId::SPLAT);
             }
             else if (egg.type == EggType::BASKET_RESTORE)
@@ -2896,7 +3134,7 @@ GameEngine::PatchEffect GameEngine::updatePatches(const MyGrid &grid)
             {
                 switch (pt.type)
                 {
-                case PatchType::SLIME: onSlime = true; fx.speedMul = std::min(fx.speedMul, 0.45); break;
+                case PatchType::SLIME: onSlime = true; fx.speedMul = std::min(fx.speedMul, 0.60); break;
                 case PatchType::MUD:   onMud = true;   fx.speedMul = std::min(fx.speedMul, 0.30); break;
                 case PatchType::ICE:   onIce = true;   fx.slipAlpha = std::min(fx.slipAlpha, 0.20); break;
                 }

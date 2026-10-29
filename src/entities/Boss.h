@@ -69,7 +69,7 @@ constexpr int BOSS_BELLY_DROP = 10;    // eggs leave the boss this many rows bel
 
 const BossDef &bossDefForTier(int tier);
 inline int bossTierForLevel(int level) {
-    const int t = level <= 3 ? 0 : level / 10;   // 3->0, 10->1, 20->2, 30->3, 40->4, 50->4 (final rematch)
+    const int t = (level / 10) - 1;   // 10->0, 20->1, 30->2, 40->3, 50->4 (climax at max level)
     return t < 0 ? 0 : (t >= BOSS_TIERS ? BOSS_TIERS - 1 : t);
 }
 

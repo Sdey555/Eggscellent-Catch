@@ -39,6 +39,7 @@ public:
     static QRect getVirtualRightButtonRect(int width, int height);
     static QRect getGrowthButtonRect(int width, int height);
     static QRect getCompanionButtonRect(int width, int height);
+    static QRect getDefendButtonRect(int width, int height);
 
     static void renderOnScreenControls(QPainter &painter, const GameEngine &engine, int width, int height);
 
@@ -62,7 +63,7 @@ public:
                                int minMathX, int maxMathX, int minMathY, int maxMathY, int groundMathY,
                                double dayNightProgress, double nightRatio, bool isStorm, int flashTicks, int hudTick);
     static void renderPixelClouds(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
-                                  int minMathX, int maxMathX, int maxMathY, int hudTick,
+                                  int minMathX, int maxMathX, int maxMathY, int cloudTick,
                                   double dayNightProgress, double nightRatio, bool isStorm);
     static void renderPixelHills(QPainter &painter, const MyGrid &grid, int scale, int width, int height,
                                  int minMathX, int maxMathX, int groundMathY,

@@ -27,6 +27,32 @@ void rasterizeBasket(MyPixels &pixels, const Basket &b)
     }
     pixels.setPixel(bx + hw - 1, by + 5, QColor(141, 110, 99));
 
+    // Raised Defensive Shield Dome over the rim when player is actively defending
+    if (b.isDefending)
+    {
+        const QColor shieldBorder(0, 229, 255);
+        const QColor shieldCore(180, 240, 255);
+        const QColor shieldGlint(255, 255, 255);
+
+        for (int x = bx - hw; x <= bx + hw; ++x)
+        {
+            const double norm = static_cast<double>(x - bx) / std::max(1, hw);
+            const int archH = static_cast<int>(std::round((1.0 - norm * norm) * 3.5));
+            for (int h = 1; h <= archH + 1; ++h)
+            {
+                const int sy = by + 5 + h;
+                if (h == archH + 1)
+                {
+                    pixels.setPixel(x, sy, (x % 3 == 0) ? shieldGlint : shieldBorder);
+                }
+                else
+                {
+                    pixels.setPixel(x, sy, shieldCore);
+                }
+            }
+        }
+    }
+
     // Lower Rim Band: Row by + 4
     pixels.setPixel(bx - hw, by + 4, QColor(93, 64, 55));
     for (int x = bx - hw + 1; x <= bx + hw - 1; ++x)

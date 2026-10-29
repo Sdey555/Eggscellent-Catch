@@ -11,6 +11,7 @@ struct Basket {
     int halfWidth = 12;   // Larger default width (19 pixels total)
     int height = 7;      // Larger height (7 rows)
     double speed = 1.6;
+    bool isDefending = false;
 };
 
 void rasterizeBasket(MyPixels &pixels, const Basket &b);
