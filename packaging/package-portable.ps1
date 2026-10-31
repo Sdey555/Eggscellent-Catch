@@ -24,7 +24,7 @@ $null = New-Item -ItemType Directory -Path $stageDirectory -Force
 
 try {
     Get-ChildItem -LiteralPath $releaseDirectory -File -Recurse |
-        Where-Object { $_.Extension -in '.dll', '.exe', '.qm' } |
+        Where-Object { $_.Extension -in '.dll', '.exe', '.qm', '.wav' } |
         ForEach-Object {
             $relativePath = $_.FullName.Substring($releaseDirectory.Length).TrimStart('\')
             $destination = Join-Path $stageDirectory $relativePath

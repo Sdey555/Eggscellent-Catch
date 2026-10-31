@@ -19,12 +19,12 @@ void CanvasLabel::mouseMoveEvent(QMouseEvent *ev)
         const int dy = ev->pos().y() - lastDragY;
         lastDragY = ev->pos().y();
 
-        if (std::abs(ev->pos().y() - dragStartPos.y()) > 4 || std::abs(ev->pos().x() - dragStartPos.x()) > 4)
+        if ((ev->pos() - dragStartPos).manhattanLength() > 14)
         {
             hasDragged = true;
         }
 
-        if (dy != 0)
+        if (dy != 0 && hasDragged)
         {
             emit dragScrolled(dy);
         }

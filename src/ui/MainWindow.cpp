@@ -378,9 +378,24 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     }
     else if (engine.getState() == GameState::SETTINGS)
     {
-        if (key == Qt::Key_Escape || key == Qt::Key_Backspace || key == Qt::Key_Back)
+        if (key == Qt::Key_A || key == Qt::Key_G)
         {
-            togglePause();
+            engine.setGameAssistEnabled(!engine.isGameAssistEnabled());
+            audioManager.playSound(SoundId::UI_CLICK);
+            redrawPixels();
+            return;
+        }
+        else if (key == Qt::Key_Escape || key == Qt::Key_Backspace || key == Qt::Key_Back)
+        {
+            engine.setState(previousStateBeforeSettings);
+            if (previousStateBeforeSettings == GameState::PLAYING)
+            {
+                audioManager.resumeBGM();
+                lockCursorToFrame();
+            }
+            audioManager.playSound(SoundId::UI_CLICK);
+            updateHUD();
+            redrawPixels();
             return;
         }
     }
@@ -532,6 +547,14 @@ void MainWindow::gameLoopTick()
     else if (engine.getState() == GameState::PAUSED || engine.getState() == GameState::MENU || engine.getState() == GameState::SETTINGS)
     {
         unlockCursor();
+        if (engine.getState() == GameState::PAUSED || engine.getState() == GameState::SETTINGS)
+        {
+            if (prevState != engine.getState())
+            {
+                redrawPixels();
+            }
+            return;
+        }
     }
     else if (engine.getState() == GameState::PLAYING)
     {
@@ -621,7 +644,7 @@ void MainWindow::onDragScrolled(int dy)
     {
         const int cardH = std::min(height - 40, 350);
         const int viewportH = cardH - 60;
-        const int totalContentH = 325;
+        const int totalContentH = 360;
         const int maxScroll = std::max(0, totalContentH - viewportH);
         engine.scrollSettings(-dy, maxScroll);
         redrawPixels();
@@ -925,7 +948,7 @@ void MainWindow::onMouseLeftClicked()
 
         const int contentTop = cardY + 52;
         const int viewportH = cardH - 60;
-        const int totalContentH = 325;
+        const int totalContentH = 360;
         const int maxScroll = std::max(0, totalContentH - viewportH);
         const int scrollY = std::clamp(engine.getSettingsScrollY(), 0, maxScroll);
 
@@ -1061,6 +1084,25 @@ void MainWindow::onMouseLeftClicked()
                     return;
                 }
             }
+
+            // --- ROW 6: Game Assist ---
+            const int y6 = contentTop + 208;
+            const QRect btnAssistOn(rowLeftX + 120, y6, 115, 26);
+            const QRect btnAssistOff(rowLeftX + 245, y6, 115, 26);
+            if (btnAssistOn.contains(logicalPos))
+            {
+                engine.setGameAssistEnabled(true);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
+            else if (btnAssistOff.contains(logicalPos))
+            {
+                engine.setGameAssistEnabled(false);
+                audioManager.playSound(SoundId::UI_CLICK);
+                redrawPixels();
+                return;
+            }
         }
 
         // Clicking anywhere inside the card frame outside buttons does nothing
@@ -1162,16 +1204,22 @@ void MainWindow::onMouseLeftClicked()
         const QRect rightRect = GameRenderer::getVirtualRightButtonRect(width, height);
         if (leftRect.contains(clickPos))
         {
-            engine.setKeyLeft(true);
+            engine.moveBasketBy(-12.0);
+            engine.setKeyLeft(false);
             engine.setKeyRight(false);
+            redrawPixels();
             return;
         }
         else if (rightRect.contains(clickPos))
         {
-            engine.setKeyRight(true);
+            engine.moveBasketBy(12.0);
             engine.setKeyLeft(false);
+            engine.setKeyRight(false);
+            redrawPixels();
             return;
         }
+        engine.setKeyLeft(false);
+        engine.setKeyRight(false);
         return;
     }
     else if (engine.getControlMode() == ControlMode::GYROSCOPE)

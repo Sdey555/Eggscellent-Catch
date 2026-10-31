@@ -31,7 +31,7 @@ void GameEngine::init(const MyGrid &grid)
     dayNightTick = 0;
     thunderstormActive = false;
     thunderstormTicks = 0;
-    thunderstormCooldown = 2800 + (rng() % 1600); // 90-140s rare initial cooldown
+    thunderstormCooldown = 600 + (rng() % 300);
     lightningFlashTicks = 0;
     lightningShockTimer = 0;
     lightningStrikeState = 0;
@@ -88,6 +88,10 @@ void GameEngine::init(const MyGrid &grid)
     frostCooldown = 200;
     basketOnPatch = false;
     basketPatchType = PatchType::SLIME;
+    thunderstormActive = false;
+    thunderstormTicks = 0;
+    const int initStormCd = (mode == GameMode::EASY ? 900 : (mode == GameMode::MEDIUM ? 600 : 400));
+    thunderstormCooldown = initStormCd + (rng() % 300);
 
     const int width = std::max(grid.getWidth(), 640);
     const int height = std::max(grid.getHeight(), 480);
@@ -427,11 +431,12 @@ Bird GameEngine::createBird(size_t index, const MyGrid &grid)
     const int maxMathY = grid.screenToMathY(0);
 
     const int topY = maxMathY - 11;
-    const int bottomY = groundMathY + 20;
-    const int availableSpan = std::max(30, topY - bottomY);
+    const int minBirdHeight = groundMathY + 52;
+    const int bottomY = minBirdHeight;
+    const int availableSpan = std::max(40, topY - bottomY);
     const size_t anticipatedCount = std::max(size_t(2), birds.size() + 1);
     const int numGaps = std::max(1, static_cast<int>(anticipatedCount - 1));
-    const int verticalSpacing = std::clamp(availableSpan / numGaps, 18, 28);
+    const int verticalSpacing = std::clamp(availableSpan / numGaps, 18, 34);
 
     const double screenSpan = std::max(50.0, static_cast<double>(maxMathX - minMathX));
 
@@ -695,24 +700,27 @@ void GameEngine::updateWeather()
         }
         if (thunderstormCooldown <= 0)
         {
-            // Rare thunderstorm: cooldown 90-150s
-            thunderstormCooldown = 2800 + (rng() % 1800);
-            int triggerChance = 4; // Easy: rare 4%
-            if (mode == GameMode::MEDIUM)
+            const int stormGate = (mode == GameMode::EASY ? 3 : (mode == GameMode::MEDIUM ? 2 : 1));
+            if (level >= stormGate)
             {
-                triggerChance = 8; // Medium: 8%
+                int triggerChance = (mode == GameMode::EASY ? 40 : (mode == GameMode::MEDIUM ? 65 : 85));
+                if (static_cast<int>(rng() % 100) < triggerChance)
+                {
+                    thunderstormActive = true;
+                    thunderstormTicks = 330; // exactly 10 seconds!
+                    statusMessage = "⚡ THUNDERSTORM! Pouring rain and lightning! Birds have fled to the clouds!";
+                    addFloatingText(basket.mathX, groundMathY + 28.0, "⚡ THUNDERSTORM (10s)! ⚡", QColor(255, 235, 59));
+                    const int baseCd = (mode == GameMode::EASY ? 1500 : (mode == GameMode::MEDIUM ? 1000 : 700));
+                    thunderstormCooldown = baseCd + (rng() % 500);
+                }
+                else
+                {
+                    thunderstormCooldown = (mode == GameMode::EASY ? 400 : (mode == GameMode::MEDIUM ? 300 : 200));
+                }
             }
-            else if (mode == GameMode::HARD)
+            else
             {
-                triggerChance = 15; // Hard: 15%
-            }
-
-            if (static_cast<int>(rng() % 100) < triggerChance)
-            {
-                thunderstormActive = true;
-                thunderstormTicks = 330; // exactly 10 seconds!
-                statusMessage = "⚡ THUNDERSTORM! Pouring rain and lightning! Birds have fled to the clouds!";
-                addFloatingText(basket.mathX, groundMathY + 28.0, "⚡ THUNDERSTORM (10s)! ⚡", QColor(255, 235, 59));
+                thunderstormCooldown = 300;
             }
         }
     }
@@ -855,9 +863,11 @@ void GameEngine::updatePhysics(const MyGrid &grid)
 
     if (controlMode == ControlMode::GYROSCOPE)
     {
-        gyroTilt = MotionSensor::instance().getTiltX();
-        // Responsive tilt glide up to full speed
-        basket.mathX += gyroTilt * moveSpeed * 1.35;
+        const float targetTilt = MotionSensor::instance().getTiltX();
+        gyroTilt += (targetTilt - gyroTilt) * 0.22f;
+        const float sign = (gyroTilt >= 0.0f) ? 1.0f : -1.0f;
+        const float curvedTilt = sign * std::pow(std::abs(gyroTilt), 1.25f);
+        basket.mathX += curvedTilt * moveSpeed * 1.35;
 
         // Support auxiliary keyboard arrows or on-screen button taps if pressed
         if (keyLeftPressed)
@@ -968,10 +978,11 @@ void GameEngine::updateBirds(const MyGrid &grid)
     const int maxMathY = grid.screenToMathY(0);
 
     const int topY = maxMathY - 11;
-    const int bottomY = groundMathY + 20;
-    const int availableSpan = std::max(30, topY - bottomY);
+    const int minBirdHeight = groundMathY + 52;
+    const int bottomY = minBirdHeight;
+    const int availableSpan = std::max(40, topY - bottomY);
     const int numGaps = std::max(1, static_cast<int>(birds.size() - 1));
-    const int verticalSpacing = (birds.size() <= 1) ? 0 : std::clamp(availableSpan / numGaps, 18, 28);
+    const int verticalSpacing = (birds.size() <= 1) ? 0 : std::clamp(availableSpan / numGaps, 18, 34);
 
     // -------------------------------------------------------------
     // BIRD ATTACK DISPATCHER (From Level 1 onwards!)
@@ -1018,8 +1029,10 @@ void GameEngine::updateBirds(const MyGrid &grid)
                     addFloatingText(attacker.mathX, attacker.mathY + 4.0, "⚠️ WATCH OUT! ⚠️", QColor(255, 23, 68));
                     statusMessage = "⚠️ BIRD ATTACK! Defend with [SPACE] / [DEFEND] or DODGE!";
 
-                    const int baseInterval = std::max(180, 360 - (level - 1) * 8);
-                    birdAttackCooldownTicks = baseInterval + (rng() % 90);
+                    const int baseInterval = (mode == GameMode::EASY) ? std::max(360, 520 - (level - 1) * 10)
+                                           : (mode == GameMode::MEDIUM) ? std::max(240, 360 - (level - 1) * 8)
+                                           : std::max(150, 240 - (level - 1) * 8);
+                    birdAttackCooldownTicks = baseInterval + (rng() % 80);
                 }
                 else
                 {
@@ -1064,7 +1077,8 @@ void GameEngine::updateBirds(const MyGrid &grid)
                 // Warning hover quiver
                 bird.mathX = bird.attackStartX + (bird.attackTicks % 2 == 0 ? 0.35 : -0.35);
 
-                if (bird.attackTicks >= 42) // ~1.3s telegraph
+                const int telegraphTicks = (mode == GameMode::EASY ? 40 : (mode == GameMode::MEDIUM ? 30 : 20));
+                if (bird.attackTicks >= telegraphTicks)
                 {
                     bird.attackState = Bird::AttackState::DIVE;
                     bird.attackTicks = 0;
@@ -1388,7 +1402,7 @@ void GameEngine::spawnLegendaryBird(const MyGrid &grid)
     const int minMathX = grid.screenToMathX(0);
     const int maxMathX = grid.screenToMathX(frameW);
     const int maxMathY = grid.screenToMathY(0);
-    const int minBirdY = groundMathY + 28;
+    const int minBirdY = groundMathY + 52;
     const int maxBirdY = maxMathY - 12;
 
     legendaryBirdActive = true;
@@ -1471,7 +1485,7 @@ void GameEngine::updateLegendaryBird(const MyGrid &grid)
     const int minMathX = grid.screenToMathX(0);
     const int maxMathX = grid.screenToMathX(frameW);
     const int maxMathY = grid.screenToMathY(0);
-    const int minBirdY = groundMathY + 28;
+    const int minBirdY = groundMathY + 52;
     const int maxBirdY = maxMathY - 12;
 
     legendaryAnimTick++;

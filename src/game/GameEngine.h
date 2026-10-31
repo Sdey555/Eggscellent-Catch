@@ -95,6 +95,9 @@ public:
     void setMouseControlAllowed(bool allowed) { mouseControlAllowed = allowed; }
     bool isLightningFlashEnabled() const { return lightningFlashEnabled; }
     void setLightningFlashEnabled(bool enabled) { lightningFlashEnabled = enabled; }
+    bool isGameAssistEnabled() const { return gameAssistEnabled; }
+    void setGameAssistEnabled(bool enabled) { gameAssistEnabled = enabled; }
+    void moveBasketBy(double delta) { basket.mathX += delta; }
 
     ControlMode getControlMode() const { return controlMode; }
     void setControlMode(ControlMode m);
@@ -229,6 +232,7 @@ private:
     bool mouseControl{false};
     bool mouseControlAllowed{true};
     bool lightningFlashEnabled{true};
+    bool gameAssistEnabled{true};
 #if defined(Q_OS_ANDROID)
     ControlMode controlMode{ControlMode::SCREEN_TOUCH};
 #else

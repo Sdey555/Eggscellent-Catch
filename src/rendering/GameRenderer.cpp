@@ -1213,6 +1213,24 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
         return QPixmap();
     }
 
+    const GameState state = engine.getState();
+    if ((state == GameState::SETTINGS || state == GameState::PAUSED) &&
+        hasCachedBackground && cachedBackground.size() == QSize(width, height))
+    {
+        QPixmap pix = cachedBackground;
+        QPainter painter(&pix);
+        if (state == GameState::PAUSED)
+        {
+            renderPauseMenu(painter, engine, width, height);
+        }
+        else if (state == GameState::SETTINGS)
+        {
+            renderSettingsPage(painter, engine, audio, scale, width, height);
+        }
+        painter.end();
+        return pix;
+    }
+
     QPixmap pix(width, height);
     QPainter painter(&pix);
     painter.setRenderHint(QPainter::Antialiasing, false);
@@ -1509,7 +1527,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // Shocked Basket Electrical Aura
-    if (engine.getLightningShockTimer() > 0)
+    if (engine.getLightningShockTimer() > 0 && engine.isGameAssistEnabled())
     {
         const Basket &b = engine.getBasket();
         const int bx = grid.mathToScreenX(static_cast<int>(std::round(b.mathX)));
@@ -1672,7 +1690,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // Shocked Basket Overhead Badge
-    if (engine.getLightningShockTimer() > 0)
+    if (engine.getLightningShockTimer() > 0 && engine.isGameAssistEnabled())
     {
         const Basket &b = engine.getBasket();
         const int bx = grid.mathToScreenX(static_cast<int>(std::round(b.mathX)));
@@ -1689,7 +1707,7 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     }
 
     // Surface badges: what is under (or happening to) the basket
-    if (engine.getState() == GameState::PLAYING)
+    if (engine.getState() == GameState::PLAYING && engine.isGameAssistEnabled())
     {
         const Basket &b = engine.getBasket();
         const int bx = grid.mathToScreenX(static_cast<int>(std::round(b.mathX)));
@@ -2195,6 +2213,12 @@ QPixmap GameRenderer::renderFrame(const GameEngine &engine,
     painter.end();
 
     // Screen shake (boss landings, big hits, rage): shift the finished frame a few pixels
+    if (state == GameState::PLAYING || state == GameState::MENU)
+    {
+        cachedBackground = pix;
+        hasCachedBackground = true;
+    }
+
     if (engine.getState() == GameState::PLAYING && engine.getScreenShakeTicks() > 0)
     {
         const int mag = std::max(1, std::min(engine.getScreenShakeMag(), (engine.getScreenShakeTicks() + 2) / 3 + 1)) * std::max(1, scale / 3);
@@ -2630,7 +2654,7 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
     // Scrollable Viewport
     const int contentTop = cardY + 52;
     const int viewportH = cardH - 60;
-    const int totalContentH = 325;
+    const int totalContentH = 360;
     const int maxScroll = std::max(0, totalContentH - viewportH);
     const int scrollY = std::clamp(engine.getSettingsScrollY(), 0, maxScroll);
 
@@ -2786,9 +2810,32 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
         painter.drawText(sb, Qt::AlignCenter, scaleLabels[i]);
     }
 
-    // --- Keybinds Overview Panel ---
+    // --- ROW 6: Game Assist (Warnings & Hazard Badges) ---
     const int y6 = contentTop + 208;
-    const QRect keyBox(rowLeftX, y6, cardW - 70, 74);
+    painter.setFont(lblFont);
+    painter.setPen(QColor(224, 230, 237));
+    painter.drawText(QRect(rowLeftX, y6, 120, 26), Qt::AlignLeft | Qt::AlignVCenter, "Game Assist:");
+
+    const bool assistOn = engine.isGameAssistEnabled();
+    const QRect btnAssistOn(rowLeftX + 120, y6, 115, 26);
+    const QRect btnAssistOff(rowLeftX + 245, y6, 115, 26);
+
+    painter.setFont(btnFont);
+    painter.setPen(QPen(assistOn ? QColor(46, 204, 113) : QColor(60, 75, 95), assistOn ? 2 : 1));
+    painter.setBrush(assistOn ? QColor(22, 54, 38) : QColor(26, 32, 44));
+    painter.drawRoundedRect(btnAssistOn, 6, 6);
+    painter.setPen(assistOn ? QColor(46, 204, 113) : QColor(160, 175, 195));
+    painter.drawText(btnAssistOn, Qt::AlignCenter, "🟢 ON (Default)");
+
+    painter.setPen(QPen(!assistOn ? QColor(255, 107, 107) : QColor(60, 75, 95), !assistOn ? 2 : 1));
+    painter.setBrush(!assistOn ? QColor(56, 24, 28) : QColor(26, 32, 44));
+    painter.drawRoundedRect(btnAssistOff, 6, 6);
+    painter.setPen(!assistOn ? QColor(255, 107, 107) : QColor(160, 175, 195));
+    painter.drawText(btnAssistOff, Qt::AlignCenter, "⚪ OFF (Pro)");
+
+    // --- Keybinds Overview Panel ---
+    const int yKeys = contentTop + 248;
+    const QRect keyBox(rowLeftX, yKeys, cardW - 70, 74);
     painter.setPen(QPen(QColor(42, 54, 76), 1));
     painter.setBrush(QColor(14, 18, 28, 200));
     painter.drawRoundedRect(keyBox, 8, 8);
@@ -2796,7 +2843,7 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
     QFont keyTitleFont("Segoe UI", 9, QFont::Bold);
     painter.setFont(keyTitleFont);
     painter.setPen(QColor(255, 209, 102));
-    painter.drawText(QRect(rowLeftX + 10, y6 + 5, cardW - 90, 16), Qt::AlignLeft, "QUICK CONTROLS REFERENCE:");
+    painter.drawText(QRect(rowLeftX + 10, yKeys + 5, cardW - 90, 16), Qt::AlignLeft, "QUICK CONTROLS REFERENCE:");
 
     QFont keyBodyFont("Segoe UI", 8, QFont::Normal);
     painter.setFont(keyBodyFont);
@@ -2820,10 +2867,10 @@ void GameRenderer::renderSettingsPage(QPainter &painter, const GameEngine &engin
         moveTip = "• Move: Mouse Cursor OR [A / D] / [Left / Right Arrow] Keys (speed-capped)";
     }
 
-    painter.drawText(QRect(rowLeftX + 10, y6 + 24, cardW - 90, 16), Qt::AlignLeft, moveTip);
-    painter.drawText(QRect(rowLeftX + 10, y6 + 42, cardW - 90, 16), Qt::AlignLeft,
-                     "• [H] or 🧺 Button: Growth Egg  •  [C] or 🤖 Button: Companion (Hard)  •  [ESC] or ⏸: Pause");
-    painter.drawText(QRect(rowLeftX + 10, y6 + 58, cardW - 90, 16), Qt::AlignLeft,
+    painter.drawText(QRect(rowLeftX + 10, yKeys + 24, cardW - 90, 16), Qt::AlignLeft, moveTip);
+    painter.drawText(QRect(rowLeftX + 10, yKeys + 42, cardW - 90, 16), Qt::AlignLeft,
+                     "• [H] / 🧺: Growth  •  [C] / 🤖: Companion  •  [A]: Assist Toggle  •  [ESC] / ⏸: Pause");
+    painter.drawText(QRect(rowLeftX + 10, yKeys + 58, cardW - 90, 16), Qt::AlignLeft,
                      "• Scroll: Touch / Drag up and down or use Mouse Wheel to scroll settings");
 
     painter.restore();

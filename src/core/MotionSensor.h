@@ -55,7 +55,7 @@ public:
         }
 
         ASensorEventQueue_enableSensor(m_eventQueue, m_accelerometer);
-        ASensorEventQueue_setEventRate(m_eventQueue, m_accelerometer, 20000); // 20ms = 50Hz
+        ASensorEventQueue_setEventRate(m_eventQueue, m_accelerometer, 10000); // 10ms = 100Hz
         m_running = true;
     }
 
@@ -127,19 +127,19 @@ public:
             rawTilt = m_accY;
         }
 
-        // Apply deadzone and scaling:
-        // Gravity is ~9.8 m/s^2; ~3.8 m/s^2 (~23 degree tilt) corresponds to full speed
+        // Apply continuous smooth deadzone and scaling:
         const float maxTiltAccel = 3.8f;
         float norm = rawTilt / maxTiltAccel;
         norm = std::clamp(norm, -1.0f, 1.0f);
 
-        // Deadzone to prevent hand tremor jitter
-        if (std::abs(norm) < 0.07f)
+        // Smooth continuous deadzone: smoothly ramps from 0.0 without jumping
+        const float deadzone = 0.05f;
+        if (std::abs(norm) <= deadzone)
         {
             return 0.0f;
         }
-
-        return norm;
+        float smoothNorm = std::copysign((std::abs(norm) - deadzone) / (1.0f - deadzone), norm);
+        return smoothNorm;
     }
 
 private:

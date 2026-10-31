@@ -85,6 +85,10 @@ public:
                           int groundMathY, double density, int hudTick);
     // Boss health bar and the warning / victory banners
     static void renderBossHud(QPainter &painter, const GameEngine &engine, int width, int height, int hudTick);
+
+private:
+    QPixmap cachedBackground;
+    bool hasCachedBackground{false};
 };
 
 #endif // GAMERENDERER_H
